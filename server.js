@@ -8,61 +8,62 @@ const bcrypt = require("bcryptjs");
 
 const app = express();
 
-/* =========================================================
-   NEXA ENVIRONMENT
-========================================================= */
+const PORT = process.env.PORT || 3000;
+const HOST = "0.0.0.0";
 
-const PORT = Number(process.env.PORT) || 3000;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
-
-const ROOT_DIR = __dirname;
-const PUBLIC_DIR = path.join(ROOT_DIR, "public");
-const DATA_DIR = path.join(ROOT_DIR, "data");
+const PUBLIC_DIR = path.join(__dirname, "public");
+const ADMIN_DIR = path.join(PUBLIC_DIR, "admin");
+const DATA_DIR = path.join(__dirname, "data");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
 
-console.log(`
-==============================================
-              NEXA ENVIRONMENT
-==============================================
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 
-.env loaded: ${Boolean(process.env.ADMIN_PASSWORD || process.env.GEMINI_API_KEY)}
-Admin password configured: ${Boolean(ADMIN_PASSWORD)}
-Admin password length: ${ADMIN_PASSWORD.length}
-Gemini API configured: ${Boolean(GEMINI_API_KEY)}
-
-==============================================
-`);
-
-/* =========================================================
-   DATA SETUP
-========================================================= */
-
-if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-
-if (!fs.existsSync(USERS_FILE)) {
-    fs.writeFileSync(USERS_FILE, "[]", "utf8");
-}
-
-/* =========================================================
-   APP SETUP
-========================================================= */
-
-app.use(express.json({ limit: "1mb" }));
-app.use(express.urlencoded({ extended: true }));
-
-/* =========================================================
-   IN-MEMORY SESSIONS
-========================================================= */
+const GEMINI_MODELS = [
+    "gemini-3.8-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-3.1-flash-lite",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-flash"
+];
 
 const sessions = new Map();
 const adminSessions = new Map();
 
-/* =========================================================
-   USER DATABASE HELPERS
-========================================================= */
+
+// ============================================================
+// NEXA ENVIRONMENT
+// ============================================================
+
+console.log("");
+console.log("==============================================");
+console.log("              NEXA ENVIRONMENT");
+console.log("==============================================");
+console.log(".env loaded:", Boolean(process.env.GEMINI_API_KEY || process.env.ADMIN_PASSWORD));
+console.log("Admin password configured:", Boolean(ADMIN_PASSWORD));
+console.log("Admin password length:", ADMIN_PASSWORD.length);
+console.log("Gemini API configured:", Boolean(GEMINI_API_KEY));
+console.log("==============================================");
+console.log("");
+
+
+// ============================================================
+// DATA SETUP
+// ============================================================
+
+function ensureDataFiles() {
+    if (!fs.existsSync(DATA_DIR)) {
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+
+    if (!fs.existsSync(USERS_FILE)) {
+        fs.writeFileSync(USERS_FILE, "[]", "utf8");
+    }
+}
+
+ensureDataFiles();
+
 
 function readUsers() {
     try {
@@ -74,55 +75,53 @@ function readUsers() {
 
         const users = JSON.parse(raw);
 
-        if (!Array.isArray(users)) {
-            return [];
-        }
-
-        return users;
+        return Array.isArray(users) ? users : [];
     } catch (error) {
-        console.error("Could not read users.json:", error.message);
+        console.error("Failed to read users.json:", error);
         return [];
     }
 }
 
+
 function writeUsers(users) {
-    try {
-        fs.writeFileSync(
-            USERS_FILE,
-            JSON.stringify(users, null, 2),
-            "utf8"
-        );
-
-        return true;
-    } catch (error) {
-        console.error("Could not write users.json:", error.message);
-        return false;
-    }
+    fs.writeFileSync(
+        USERS_FILE,
+        JSON.stringify(users, null, 2),
+        "utf8"
+    );
 }
 
-/* =========================================================
-   GENERAL HELPERS
-========================================================= */
 
-function createToken() {
-    return crypto.randomBytes(32).toString("hex");
+// ============================================================
+// HELPERS
+// ============================================================
+
+function generateId() {
+    return crypto.randomUUID();
 }
+
 
 function normalizeUsername(username) {
-    return String(username || "").trim().toLowerCase();
+    return String(username || "")
+        .trim()
+        .toLowerCase();
 }
 
+
 function publicUser(user) {
+    if (!user) {
+        return null;
+    }
+
     const used = Number(user.aiMessagesUsed || 0);
 
     return {
         id: user.id,
         username: user.username,
         plan: user.plan || "free",
-        proRequest: user.proRequest || "none",
+        proRequest: user.proRequest || null,
         createdAt: user.createdAt,
         aiMessagesUsed: used,
-
         aiMessagesRemaining:
             user.plan === "pro"
                 ? null
@@ -130,103 +129,91 @@ function publicUser(user) {
     };
 }
 
-function findUserById(id) {
-    const users = readUsers();
-    return users.find(user => user.id === id);
+
+function sendError(res, status, error, extra = {}) {
+    return res.status(status).json({
+        error,
+        ...extra
+    });
 }
 
-function saveUser(updatedUser) {
+
+function getSessionUser(req) {
+    const sessionId = req.headers["x-session-id"];
+
+    if (!sessionId) {
+        return null;
+    }
+
+    const userId = sessions.get(sessionId);
+
+    if (!userId) {
+        return null;
+    }
+
     const users = readUsers();
 
-    const index = users.findIndex(
-        user => user.id === updatedUser.id
-    );
+    return users.find(user => user.id === userId) || null;
+}
 
-    if (index === -1) {
+
+function getAdminSession(req) {
+    const sessionId = req.headers["x-admin-session"];
+
+    if (!sessionId) {
         return false;
     }
 
-    users[index] = updatedUser;
-
-    return writeUsers(users);
+    return adminSessions.has(sessionId);
 }
 
-/* =========================================================
-   AUTH MIDDLEWARE
-========================================================= */
 
 function requireUser(req, res, next) {
-    const auth = req.headers.authorization || "";
-
-    if (!auth.startsWith("Bearer ")) {
-        return res.status(401).json({
-            error: "Authentication required."
-        });
-    }
-
-    const token = auth.slice(7);
-    const userId = sessions.get(token);
-
-    if (!userId) {
-        return res.status(401).json({
-            error: "Session expired. Please login again."
-        });
-    }
-
-    const user = findUserById(userId);
+    const user = getSessionUser(req);
 
     if (!user) {
-        sessions.delete(token);
-
-        return res.status(401).json({
-            error: "User account not found."
-        });
+        return sendError(res, 401, "Please login first.");
     }
 
     req.user = user;
-    req.token = token;
-
     next();
 }
+
 
 function requireAdmin(req, res, next) {
-    const auth = req.headers.authorization || "";
-
-    if (!auth.startsWith("Bearer ")) {
-        return res.status(401).json({
-            error: "Admin authentication required."
-        });
+    if (!getAdminSession(req)) {
+        return sendError(res, 401, "Admin authentication required.");
     }
-
-    const token = auth.slice(7);
-
-    if (!adminSessions.has(token)) {
-        return res.status(401).json({
-            error: "Admin session expired."
-        });
-    }
-
-    req.adminToken = token;
 
     next();
 }
 
-/* =========================================================
-   HEALTH CHECK
-========================================================= */
+
+// ============================================================
+// MIDDLEWARE
+// ============================================================
+
+app.use(express.json({ limit: "2mb" }));
+app.use(express.urlencoded({ extended: true }));
+
+
+// ============================================================
+// HEALTH
+// ============================================================
 
 app.get("/api/health", (req, res) => {
     res.json({
         ok: true,
         service: "NEXA AI",
         status: "online",
-        timestamp: new Date().toISOString()
+        time: new Date().toISOString()
     });
 });
 
-/* =========================================================
-   REGISTER
-========================================================= */
+
+// ============================================================
+// REGISTER
+// ============================================================
 
 app.post("/api/register", async (req, res) => {
     try {
@@ -234,87 +221,89 @@ app.post("/api/register", async (req, res) => {
         const password = String(req.body.password || "");
 
         if (!username || !password) {
-            return res.status(400).json({
-                error: "Username and password are required."
-            });
+            return sendError(
+                res,
+                400,
+                "Username and password are required."
+            );
         }
 
         if (username.length < 3) {
-            return res.status(400).json({
-                error: "Username must be at least 3 characters."
-            });
+            return sendError(
+                res,
+                400,
+                "Username must contain at least 3 characters."
+            );
         }
 
-        if (password.length < 6) {
-            return res.status(400).json({
-                error: "Password must be at least 6 characters."
-            });
+        if (password.length < 4) {
+            return sendError(
+                res,
+                400,
+                "Password must contain at least 4 characters."
+            );
         }
 
         const users = readUsers();
 
-        const existingUser = users.find(
+        const existing = users.find(
             user => normalizeUsername(user.username) === username
         );
 
-        if (existingUser) {
-            return res.status(409).json({
-                error: "Username already exists."
-            });
+        if (existing) {
+            return sendError(
+                res,
+                409,
+                "Username already exists."
+            );
         }
 
         const passwordHash = await bcrypt.hash(password, 10);
 
         const user = {
-            id: crypto.randomUUID(),
+            id: generateId(),
             username,
             passwordHash,
             plan: "free",
-            proRequest: "none",
+            proRequest: null,
             aiMessagesUsed: 0,
             createdAt: new Date().toISOString()
         };
 
         users.push(user);
 
-        if (!writeUsers(users)) {
-            return res.status(500).json({
-                error: "Could not create account."
-            });
-        }
+        writeUsers(users);
 
-        const token = createToken();
-        sessions.set(token, user.id);
+        const sessionId = generateId();
+
+        sessions.set(sessionId, user.id);
 
         return res.status(201).json({
-            message: "Account created successfully.",
-            token,
+            ok: true,
+            sessionId,
             user: publicUser(user)
         });
 
     } catch (error) {
-        console.error("Register error:", error);
+        console.error("REGISTER ERROR:", error);
 
-        return res.status(500).json({
-            error: "Registration failed."
-        });
+        return sendError(
+            res,
+            500,
+            "Registration failed."
+        );
     }
 });
 
-/* =========================================================
-   LOGIN
-========================================================= */
+
+// ============================================================
+// LOGIN
+// ============================================================
 
 app.post("/api/login", async (req, res) => {
     try {
         const username = normalizeUsername(req.body.username);
         const password = String(req.body.password || "");
-
-        if (!username || !password) {
-            return res.status(400).json({
-                error: "Username and password are required."
-            });
-        }
 
         const users = readUsers();
 
@@ -323,9 +312,11 @@ app.post("/api/login", async (req, res) => {
         );
 
         if (!user) {
-            return res.status(401).json({
-                error: "Invalid username or password."
-            });
+            return sendError(
+                res,
+                401,
+                "Invalid username or password."
+            );
         }
 
         const validPassword = await bcrypt.compare(
@@ -334,289 +325,323 @@ app.post("/api/login", async (req, res) => {
         );
 
         if (!validPassword) {
-            return res.status(401).json({
-                error: "Invalid username or password."
-            });
+            return sendError(
+                res,
+                401,
+                "Invalid username or password."
+            );
         }
 
-        const token = createToken();
+        const sessionId = generateId();
 
-        sessions.set(token, user.id);
+        sessions.set(sessionId, user.id);
 
         return res.json({
-            message: "Login successful.",
-            token,
+            ok: true,
+            sessionId,
             user: publicUser(user)
         });
 
     } catch (error) {
-        console.error("Login error:", error);
+        console.error("LOGIN ERROR:", error);
 
-        return res.status(500).json({
-            error: "Login failed."
-        });
+        return sendError(
+            res,
+            500,
+            "Login failed."
+        );
     }
 });
 
-/* =========================================================
-   CURRENT USER
-========================================================= */
+
+// ============================================================
+// CURRENT USER
+// ============================================================
 
 app.get("/api/me", requireUser, (req, res) => {
     res.json({
+        ok: true,
         user: publicUser(req.user)
     });
 });
 
-/* =========================================================
-   PRO REQUEST
-========================================================= */
+
+// ============================================================
+// PRO REQUEST
+// ============================================================
 
 app.post("/api/pro/request", requireUser, (req, res) => {
-    const user = req.user;
+    const users = readUsers();
+
+    const index = users.findIndex(
+        user => user.id === req.user.id
+    );
+
+    if (index === -1) {
+        return sendError(res, 404, "User not found.");
+    }
+
+    const user = users[index];
 
     if (user.plan === "pro") {
-        return res.status(400).json({
-            error: "You already have NEXA Pro.",
+        return sendError(
+            res,
+            400,
+            "You are already a NEXA Pro user."
+        );
+    }
+
+    if (user.proRequest && user.proRequest.status === "pending") {
+        return res.json({
+            ok: true,
+            message: "Your Pro request is already pending.",
             user: publicUser(user)
         });
     }
 
-    if (user.proRequest === "pending") {
-        return res.status(400).json({
-            error: "Your Pro request is already pending.",
-            user: publicUser(user)
-        });
-    }
+    user.proRequest = {
+        status: "pending",
+        requestedAt: new Date().toISOString()
+    };
 
-    user.proRequest = "pending";
+    writeUsers(users);
 
-    if (!saveUser(user)) {
-        return res.status(500).json({
-            error: "Could not submit Pro request."
-        });
-    }
-
-    res.json({
+    return res.json({
+        ok: true,
         message: "Pro request submitted successfully.",
         user: publicUser(user)
     });
 });
 
-/* =========================================================
-   CANCEL PRO REQUEST
-========================================================= */
+
+// ============================================================
+// CANCEL PRO REQUEST
+// ============================================================
 
 app.post("/api/pro/cancel", requireUser, (req, res) => {
-    const user = req.user;
+    const users = readUsers();
 
-    if (user.proRequest !== "pending") {
-        return res.status(400).json({
-            error: "There is no pending Pro request."
-        });
+    const index = users.findIndex(
+        user => user.id === req.user.id
+    );
+
+    if (index === -1) {
+        return sendError(res, 404, "User not found.");
     }
 
-    user.proRequest = "none";
+    const user = users[index];
 
-    if (!saveUser(user)) {
-        return res.status(500).json({
-            error: "Could not cancel Pro request."
-        });
+    if (
+        !user.proRequest ||
+        user.proRequest.status !== "pending"
+    ) {
+        return sendError(
+            res,
+            400,
+            "No pending Pro request found."
+        );
     }
 
-    res.json({
+    user.proRequest = {
+        status: "cancelled",
+        cancelledAt: new Date().toISOString()
+    };
+
+    writeUsers(users);
+
+    return res.json({
+        ok: true,
         message: "Pro request cancelled.",
         user: publicUser(user)
     });
 });
 
-/* =========================================================
-   ADMIN LOGIN
-========================================================= */
+
+// ============================================================
+// ADMIN LOGIN
+// ============================================================
 
 app.post("/api/admin/login", (req, res) => {
     const password = String(req.body.password || "");
 
     if (!ADMIN_PASSWORD) {
-        return res.status(500).json({
-            error: "Admin password is not configured."
-        });
+        return sendError(
+            res,
+            500,
+            "Admin password is not configured."
+        );
     }
 
     if (password !== ADMIN_PASSWORD) {
-        return res.status(401).json({
-            error: "Invalid developer password."
-        });
+        return sendError(
+            res,
+            401,
+            "Invalid admin password."
+        );
     }
 
-    const token = createToken();
+    const sessionId = generateId();
 
-    adminSessions.set(token, {
-        createdAt: Date.now()
-    });
+    adminSessions.set(sessionId, true);
 
-    res.json({
-        message: "Developer login successful.",
-        token
+    return res.json({
+        ok: true,
+        sessionId
     });
 });
 
-/* =========================================================
-   ADMIN USERS
-========================================================= */
 
-app.get("/api/admin/users", requireAdmin, (req, res) => {
-    const users = readUsers();
+// ============================================================
+// ADMIN USERS
+// ============================================================
 
-    res.json({
-        users: users.map(publicUser)
-    });
-});
+app.get(
+    "/api/admin/users",
+    requireAdmin,
+    (req, res) => {
+        const users = readUsers();
 
-/* =========================================================
-   ADMIN APPROVE PRO
-========================================================= */
+        res.json({
+            ok: true,
+            users: users.map(publicUser)
+        });
+    }
+);
+
+
+// ============================================================
+// ADMIN APPROVE PRO
+// ============================================================
 
 app.post(
     "/api/admin/pro/:userId/approve",
     requireAdmin,
     (req, res) => {
-        const user = findUserById(req.params.userId);
+        const users = readUsers();
 
-        if (!user) {
-            return res.status(404).json({
-                error: "User not found."
-            });
+        const index = users.findIndex(
+            user => user.id === req.params.userId
+        );
+
+        if (index === -1) {
+            return sendError(
+                res,
+                404,
+                "User not found."
+            );
         }
+
+        const user = users[index];
 
         user.plan = "pro";
-        user.proRequest = "none";
 
-        if (!saveUser(user)) {
-            return res.status(500).json({
-                error: "Could not approve Pro access."
-            });
-        }
+        user.proRequest = {
+            status: "approved",
+            approvedAt: new Date().toISOString()
+        };
 
-        res.json({
+        writeUsers(users);
+
+        return res.json({
+            ok: true,
             message: `${user.username} is now a NEXA Pro user.`,
             user: publicUser(user)
         });
     }
 );
 
-/* =========================================================
-   ADMIN REJECT PRO
-========================================================= */
+
+// ============================================================
+// ADMIN REJECT PRO
+// ============================================================
 
 app.post(
     "/api/admin/pro/:userId/reject",
     requireAdmin,
     (req, res) => {
-        const user = findUserById(req.params.userId);
+        const users = readUsers();
 
-        if (!user) {
-            return res.status(404).json({
-                error: "User not found."
-            });
+        const index = users.findIndex(
+            user => user.id === req.params.userId
+        );
+
+        if (index === -1) {
+            return sendError(
+                res,
+                404,
+                "User not found."
+            );
         }
 
-        user.proRequest = "rejected";
+        const user = users[index];
 
-        if (!saveUser(user)) {
-            return res.status(500).json({
-                error: "Could not reject Pro request."
-            });
-        }
+        user.plan = "free";
 
-        res.json({
+        user.proRequest = {
+            status: "rejected",
+            rejectedAt: new Date().toISOString()
+        };
+
+        writeUsers(users);
+
+        return res.json({
+            ok: true,
             message: `${user.username}'s Pro request was rejected.`,
             user: publicUser(user)
         });
     }
 );
 
-/* =========================================================
-   ADMIN REVOKE PRO
-========================================================= */
+
+// ============================================================
+// ADMIN REVOKE PRO
+// ============================================================
 
 app.post(
     "/api/admin/pro/:userId/revoke",
     requireAdmin,
     (req, res) => {
-        const user = findUserById(req.params.userId);
+        const users = readUsers();
 
-        if (!user) {
-            return res.status(404).json({
-                error: "User not found."
-            });
+        const index = users.findIndex(
+            user => user.id === req.params.userId
+        );
+
+        if (index === -1) {
+            return sendError(
+                res,
+                404,
+                "User not found."
+            );
         }
+
+        const user = users[index];
 
         user.plan = "free";
-        user.proRequest = "none";
 
-        /*
-          IMPORTANT:
-          aiMessagesUsed is NOT reset.
+        user.proRequest = {
+            status: "revoked",
+            revokedAt: new Date().toISOString()
+        };
 
-          This preserves the rule:
-          FREE USERS GET 1 AI MESSAGE TOTAL.
-        */
+        // IMPORTANT:
+        // We intentionally DO NOT reset aiMessagesUsed.
+        // A free user gets only ONE successful AI message total.
 
-        if (!saveUser(user)) {
-            return res.status(500).json({
-                error: "Could not revoke Pro access."
-            });
-        }
+        writeUsers(users);
 
-        res.json({
+        return res.json({
+            ok: true,
             message: `${user.username}'s Pro access was revoked.`,
             user: publicUser(user)
         });
     }
 );
 
-/* =========================================================
-   GEMINI HELPERS
-========================================================= */
 
-const GEMINI_MODELS = [
-    "gemini-3.8-flash",
-    "gemini-3.5-flash-lite",
-    "gemini-3.5-flash",
-    "gemini-3.1-flash-lite",
-    "gemini-2.5-flash-lite",
-    "gemini-2.5-flash"
-];
-
-function extractGeminiText(data) {
-    if (!data) {
-        return "";
-    }
-
-    if (typeof data.text === "string") {
-        return data.text.trim();
-    }
-
-    if (Array.isArray(data.candidates)) {
-        for (const candidate of data.candidates) {
-            const parts = candidate?.content?.parts;
-
-            if (Array.isArray(parts)) {
-                const text = parts
-                    .map(part => part?.text || "")
-                    .join("")
-                    .trim();
-
-                if (text) {
-                    return text;
-                }
-            }
-        }
-    }
-
-    return "";
-}
+// ============================================================
+// GEMINI
+// ============================================================
 
 async function askGemini(prompt) {
     if (!GEMINI_API_KEY) {
@@ -627,9 +652,10 @@ async function askGemini(prompt) {
 
     for (const model of GEMINI_MODELS) {
         try {
+            console.log(`Trying Gemini model: ${model}`);
+
             const url =
-                `https://generativelanguage.googleapis.com/v1beta/models/` +
-                `${model}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
+                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
 
             const response = await fetch(url, {
                 method: "POST",
@@ -650,290 +676,325 @@ async function askGemini(prompt) {
                 })
             });
 
-            const rawText = await response.text();
+            const text = await response.text();
 
-            let data = {};
+            let data;
 
             try {
-                data = rawText ? JSON.parse(rawText) : {};
+                data = JSON.parse(text);
             } catch {
-                data = {};
+                data = null;
             }
 
             if (!response.ok) {
-                const errorMessage =
+                const message =
                     data?.error?.message ||
-                    `Gemini request failed with status ${response.status}`;
-
-                lastError = new Error(
-                    `${model}: ${errorMessage}`
-                );
+                    text ||
+                    `Gemini returned HTTP ${response.status}`;
 
                 console.error(
-                    `Gemini model ${model} failed:`,
-                    errorMessage
+                    `Gemini ${model} failed:`,
+                    response.status,
+                    message
+                );
+
+                lastError = new Error(message);
+
+                continue;
+            }
+
+            const answer =
+                data?.candidates?.[0]?.content?.parts
+                    ?.map(part => part.text || "")
+                    .join("")
+                    .trim();
+
+            if (!answer) {
+                lastError = new Error(
+                    "Gemini returned an empty response."
                 );
 
                 continue;
             }
 
-            const reply = extractGeminiText(data);
+            console.log(`Gemini model successful: ${model}`);
 
-            if (!reply) {
-                lastError = new Error(
-                    `${model}: Gemini returned an empty response.`
-                );
-
-                console.error(
-                    `Gemini model ${model} returned empty response.`
-                );
-
-                continue;
-            }
-
-            return {
-                reply,
-                model
-            };
+            return answer;
 
         } catch (error) {
-            lastError = error;
-
             console.error(
-                `Gemini model ${model} error:`,
+                `Gemini ${model} request error:`,
                 error.message
             );
+
+            lastError = error;
         }
     }
 
-    throw lastError || new Error("All Gemini models failed.");
+    throw (
+        lastError ||
+        new Error("All Gemini models failed.")
+    );
 }
 
-/* =========================================================
-   CHAT
-========================================================= */
+
+// ============================================================
+// CHAT
+// ============================================================
 
 app.post("/api/chat", requireUser, async (req, res) => {
-    const user = req.user;
-
-    const prompt = String(req.body.prompt || "").trim();
-
-    if (!prompt) {
-        return res.status(400).json({
-            error: "Please enter a message."
-        });
-    }
-
-    /*
-      FREE PLAN:
-      Exactly 1 successful AI message total.
-    */
-
-    if (
-        user.plan !== "pro" &&
-        Number(user.aiMessagesUsed || 0) >= 1
-    ) {
-        return res.status(403).json({
-            code: "FREE_LIMIT_REACHED",
-            error: "You have used your 1 free AI message.",
-            message:
-                "Upgrade to NEXA Pro for unlimited AI messages.",
-            plan: "free",
-            aiMessagesUsed: 1,
-            aiMessagesRemaining: 0
-        });
-    }
-
     try {
-        const result = await askGemini(prompt);
+        const prompt = String(req.body.prompt || "").trim();
 
-        /*
-          IMPORTANT:
-          Free message is consumed ONLY after
-          Gemini successfully returns a non-empty response.
-        */
+        if (!prompt) {
+            return sendError(
+                res,
+                400,
+                "Please enter a message."
+            );
+        }
+
+        const users = readUsers();
+
+        const index = users.findIndex(
+            user => user.id === req.user.id
+        );
+
+        if (index === -1) {
+            return sendError(
+                res,
+                404,
+                "User not found."
+            );
+        }
+
+        const user = users[index];
+
+        // ====================================================
+        // FREE LIMIT
+        // ====================================================
+
+        if (
+            user.plan !== "pro" &&
+            Number(user.aiMessagesUsed || 0) >= 1
+        ) {
+            return res.status(403).json({
+                code: "FREE_LIMIT_REACHED",
+                error: "You have used your 1 free AI message.",
+                message: "Upgrade to NEXA Pro for unlimited AI messages.",
+                plan: "free",
+                aiMessagesUsed: Number(
+                    user.aiMessagesUsed || 0
+                ),
+                aiMessagesRemaining: 0
+            });
+        }
+
+        // ====================================================
+        // ASK GEMINI FIRST
+        // ====================================================
+
+        let answer;
+
+        try {
+            answer = await askGemini(prompt);
+        } catch (error) {
+            console.error("GEMINI FINAL ERROR:", error);
+
+            return sendError(
+                res,
+                502,
+                "NEXA could not get a response from Gemini.",
+                {
+                    details: error.message
+                }
+            );
+        }
+
+        // ====================================================
+        // CONSUME FREE MESSAGE ONLY AFTER SUCCESS
+        // ====================================================
 
         if (user.plan !== "pro") {
             user.aiMessagesUsed =
                 Number(user.aiMessagesUsed || 0) + 1;
 
-            saveUser(user);
+            writeUsers(users);
         }
 
-        const used = Number(user.aiMessagesUsed || 0);
-
-        res.json({
-            reply: result.reply,
-            model: result.model,
-            plan: user.plan,
-            aiMessagesUsed: used,
-
-            aiMessagesRemaining:
-                user.plan === "pro"
-                    ? null
-                    : Math.max(0, 1 - used)
+        return res.json({
+            ok: true,
+            answer,
+            user: publicUser(user)
         });
 
     } catch (error) {
-        console.error("Chat error:", error.message);
+        console.error("CHAT ERROR:", error);
 
-        /*
-          DO NOT increment aiMessagesUsed here.
-          Failed AI requests don't consume the Free message.
-        */
-
-        res.status(502).json({
-            code: "AI_REQUEST_FAILED",
-            error: "NEXA could not get a response from the AI right now.",
-            details: error.message
-        });
+        return sendError(
+            res,
+            500,
+            "NEXA encountered an unexpected error."
+        );
     }
 });
 
-/* =========================================================
-   USER LOGOUT
-========================================================= */
 
-app.post("/api/logout", requireUser, (req, res) => {
-    sessions.delete(req.token);
+// ============================================================
+// USER LOGOUT
+// ============================================================
+
+app.post("/api/logout", (req, res) => {
+    const sessionId = req.headers["x-session-id"];
+
+    if (sessionId) {
+        sessions.delete(sessionId);
+    }
 
     res.json({
-        message: "Logged out successfully."
+        ok: true
     });
 });
 
-/* =========================================================
-   ADMIN LOGOUT
-========================================================= */
 
-app.post("/api/admin/logout", requireAdmin, (req, res) => {
-    adminSessions.delete(req.adminToken);
+// ============================================================
+// ADMIN LOGOUT
+// ============================================================
+
+app.post("/api/admin/logout", (req, res) => {
+    const sessionId = req.headers["x-admin-session"];
+
+    if (sessionId) {
+        adminSessions.delete(sessionId);
+    }
 
     res.json({
-        message: "Developer logged out successfully."
+        ok: true
     });
 });
 
-/* =========================================================
-   ADMIN ROUTE
-========================================================= */
 
-app.get("/admin", (req, res) => {
-    res.sendFile(
-        path.join(PUBLIC_DIR, "admin", "index.html")
-    );
-});
+// ============================================================
+// STATIC ADMIN FILES
+// ============================================================
 
-app.get("/admin/", (req, res) => {
-    res.sendFile(
-        path.join(PUBLIC_DIR, "admin", "index.html")
-    );
-});
+app.use(
+    "/admin",
+    express.static(ADMIN_DIR)
+);
 
-/* =========================================================
-   STATIC FILES
-========================================================= */
 
-app.use(express.static(PUBLIC_DIR));
+// ============================================================
+// STATIC USER APP
+// ============================================================
 
-/* =========================================================
-   FRONTEND FALLBACK
-========================================================= */
+app.use(
+    express.static(PUBLIC_DIR)
+);
 
-app.get("*", (req, res, next) => {
+
+// ============================================================
+// EXPRESS 5 FRONTEND FALLBACK
+// ============================================================
+//
+// IMPORTANT:
+// Do NOT use:
+//
+// app.get("*", ...)
+//
+// Express 5 throws:
+//
+// PathError: Missing parameter name at index 1: *
+//
+// So we use a normal middleware instead.
+// ============================================================
+
+app.use((req, res, next) => {
     if (
-        req.path.startsWith("/api/") ||
-        req.path.startsWith("/admin")
+        req.method === "GET" &&
+        !req.path.startsWith("/api/")
     ) {
-        return next();
+        return res.sendFile(
+            path.join(PUBLIC_DIR, "index.html")
+        );
     }
 
-    res.sendFile(
-        path.join(PUBLIC_DIR, "index.html")
-    );
+    next();
 });
 
-/* =========================================================
-   404
-========================================================= */
+
+// ============================================================
+// 404
+// ============================================================
 
 app.use((req, res) => {
     res.status(404).json({
-        error: "Route not found."
+        error: "Not found"
     });
 });
 
-/* =========================================================
-   ERROR HANDLER
-========================================================= */
+
+// ============================================================
+// ERROR HANDLER
+// ============================================================
 
 app.use((err, req, res, next) => {
-    console.error("Server error:", err);
+    console.error("SERVER ERROR:", err);
+
+    if (res.headersSent) {
+        return next(err);
+    }
 
     res.status(500).json({
         error: "Internal server error."
     });
 });
 
-/* =========================================================
-   START SERVER
-========================================================= */
+
+// ============================================================
+// START SERVER
+// ============================================================
 
 const server = app.listen(
     PORT,
-    "0.0.0.0",
+    HOST,
     () => {
-        console.log(`
-==============================================
-
-             NEXA AI SERVER ONLINE
-
-==============================================
-
-PORT:     ${PORT}
-
-USER APP:
-http://0.0.0.0:${PORT}/
-
-ADMIN:
-http://0.0.0.0:${PORT}/admin/
-
-HEALTH:
-http://0.0.0.0:${PORT}/api/health
-
-==============================================
-
-FREE PLAN: 1 AI MESSAGE
-PRO PLAN: UNLIMITED AI MESSAGES
-
-==============================================
-
-Gemini: ${GEMINI_API_KEY ? "KEY FOUND" : "KEY MISSING"}
-
-==============================================
-
-SERVER IS RUNNING
-==============================================
-`);
+        console.log("");
+        console.log("==============================================");
+        console.log("             NEXA SERVER ONLINE");
+        console.log("==============================================");
+        console.log(`PORT: ${PORT}`);
+        console.log(`HOST: ${HOST}`);
+        console.log(`USER APP: http://${HOST}:${PORT}/`);
+        console.log(`ADMIN: http://${HOST}:${PORT}/admin/`);
+        console.log(`HEALTH: http://${HOST}:${PORT}/api/health`);
+        console.log("Gemini: " + (GEMINI_API_KEY ? "KEY FOUND" : "KEY MISSING"));
+        console.log("==============================================");
+        console.log("SERVER IS RUNNING...");
+        console.log("");
     }
 );
 
-/* =========================================================
-   HEARTBEAT
-========================================================= */
 
-setInterval(() => {
+// ============================================================
+// KEEP SERVER ALIVE / HEARTBEAT
+// ============================================================
+
+const heartbeat = setInterval(() => {
     console.log(
         `[NEXA] Server heartbeat ${new Date().toISOString()}`
     );
-}, 60000);
+}, 5 * 60 * 1000);
 
-/* =========================================================
-   GRACEFUL SHUTDOWN
-========================================================= */
+
+// ============================================================
+// GRACEFUL SHUTDOWN
+// ============================================================
 
 function shutdown(signal) {
     console.log(`\n[NEXA] ${signal} received. Shutting down...`);
+
+    clearInterval(heartbeat);
 
     server.close(() => {
         console.log("[NEXA] Server closed.");
@@ -945,6 +1006,7 @@ function shutdown(signal) {
         process.exit(1);
     }, 10000);
 }
+
 
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
