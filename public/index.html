@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>NEXA AI</title>
+
+    <meta name="theme-color" content="#080b14">
+    <meta name="description" content="NEXA AI - Personal AI Assistant">
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <!-- BACKGROUND -->
+    <div class="background">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="grid"></div>
+    </div>
+
+
+    <!-- ========================= -->
+    <!-- AUTH SCREEN -->
+    <!-- ========================= -->
+
+    <section id="authScreen" class="auth-screen">
+
+        <div class="auth-card">
+
+            <div class="logo-big">
+                <div class="logo-symbol">N</div>
+
+                <div>
+                    <h1>NEXA</h1>
+                    <span>AI COMMAND CENTER</span>
+                </div>
+            </div>
+
+
+            <div class="auth-tabs">
+
+                <button
+                    id="loginTab"
+                    class="auth-tab active"
+                    onclick="showAuth('login')">
+                    Login
+                </button>
+
+                <button
+                    id="registerTab"
+                    class="auth-tab"
+                    onclick="showAuth('register')">
+                    Create Account
+                </button>
+
+            </div>
+
+
+            <!-- LOGIN -->
+
+            <form id="loginForm" class="auth-form">
+
+                <h2>Welcome back</h2>
+
+                <p class="auth-description">
+                    Sign in to continue to NEXA AI.
+                </p>
+
+                <label>Username</label>
+
+                <input
+                    id="loginUsername"
+                    type="text"
+                    placeholder="Enter username"
+                    autocomplete="username"
+                    required>
+
+
+                <label>Password</label>
+
+                <input
+                    id="loginPassword"
+                    type="password"
+                    placeholder="Enter password"
+                    autocomplete="current-password"
+                    required>
+
+
+                <button
+                    class="primary-btn"
+                    type="submit">
+
+                    <span>LOGIN TO NEXA</span>
+
+                </button>
+
+            </form>
+
+
+            <!-- REGISTER -->
+
+            <form
+                id="registerForm"
+                class="auth-form hidden">
+
+                <h2>Create your account</h2>
+
+                <p class="auth-description">
+                    Start using NEXA AI for free.
+                </p>
+
+                <label>Username</label>
+
+                <input
+                    id="registerUsername"
+                    type="text"
+                    placeholder="Choose a username"
+                    autocomplete="username"
+                    required>
+
+
+                <label>Password</label>
+
+                <input
+                    id="registerPassword"
+                    type="password"
+                    placeholder="Create a password"
+                    autocomplete="new-password"
+                    required>
+
+
+                <label>Confirm Password</label>
+
+                <input
+                    id="registerConfirm"
+                    type="password"
+                    placeholder="Confirm password"
+                    autocomplete="new-password"
+                    required>
+
+
+                <button
+                    class="primary-btn"
+                    type="submit">
+
+                    <span>CREATE ACCOUNT</span>
+
+                </button>
+
+            </form>
+
+
+            <div class="auth-footer">
+
+                <span>FREE PLAN</span>
+
+                <span>•</span>
+
+                <span>UPGRADE TO PRO ANYTIME</span>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- ========================= -->
+    <!-- MAIN APP -->
+    <!-- ========================= -->
+
+    <section
+        id="appScreen"
+        class="app-screen hidden">
+
+
+        <!-- SIDEBAR -->
+
+        <aside
+            id="sidebar"
+            class="sidebar">
+
+
+            <div class="sidebar-top">
+
+                <div class="brand">
+
+                    <div class="brand-icon">
+                        N
+                    </div>
+
+                    <div>
+
+                        <div class="brand-name">
+                            NEXA
+                        </div>
+
+                        <div class="brand-sub">
+                            AI COMMAND CENTER
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <button
+                    class="mobile-close"
+                    onclick="toggleSidebar()">
+
+                    ×
+
+                </button>
+
+            </div>
+
+
+            <!-- USER -->
+
+            <div class="user-mini">
+
+                <div class="avatar">
+                    N
+                </div>
+
+                <div class="user-mini-info">
+
+                    <strong id="sidebarUsername">
+                        User
+                    </strong>
+
+                    <span id="sidebarPlan">
+                        FREE PLAN
+                    </span>
+
+                </div>
+
+            </div>
+
+
+            <!-- NAVIGATION -->
+
+            <nav class="navigation">
+
+                <button
+                    class="nav-btn active"
+                    data-page="chatPage"
+                    onclick="navigateTo('chatPage')">
+
+                    <span class="nav-icon">
+                        ⌁
+                    </span>
+
+                    <span>
+                        AI Chat
+                    </span>
+
+                </button>
+
+
+                <button
+                    class="nav-btn"
+                    data-page="proPage"
+                    onclick="navigateTo('proPage')">
+
+                    <span class="nav-icon">
+                        ◆
+                    </span>
+
+                    <span>
+                        NEXA Pro
+                    </span>
+
+                </button>
+
+
+                <button
+                    class="nav-btn"
+                    data-page="accountPage"
+                    onclick="navigateTo('accountPage')">
+
+                    <span class="nav-icon">
+                        ◉
+                    </span>
+
+                    <span>
+                        Account
+                    </span>
+
+                </button>
+
+            </nav>
+
+
+            <!-- SIDEBAR BOTTOM -->
+
+            <div class="sidebar-bottom">
+
+                <div class="connection-status">
+
+                    <span class="status-dot"></span>
+
+                    <span>
+                        NEXA SYSTEM ONLINE
+                    </span>
+
+                </div>
+
+
+                <button
+                    class="logout-btn"
+                    onclick="logout()">
+
+                    Logout
+
+                </button>
+
+            </div>
+
+        </aside>
+
+
+        <!-- ========================= -->
+        <!-- MAIN CONTENT -->
+        <!-- ========================= -->
+
+        <main class="main-content">
+
+
+            <!-- MOBILE HEADER -->
+
+            <header class="mobile-header">
+
+                <button
+                    class="menu-btn"
+                    onclick="toggleSidebar()">
+
+                    ☰
+
+                </button>
+
+
+                <div class="mobile-logo">
+                    NEXA
+                </div>
+
+
+                <div id="mobilePlan">
+                    FREE
+                </div>
+
+            </header>
+
+
+            <!-- ========================= -->
+            <!-- CHAT PAGE -->
+            <!-- ========================= -->
+
+            <section
+                id="chatPage"
+                class="page active-page">
+
+
+                <div class="page-header">
+
+                    <div>
+
+                        <span class="eyebrow">
+                            PERSONAL AI
+                        </span>
+
+                        <h1>
+                            NEXA AI
+                        </h1>
+
+                        <p>
+                            Ask anything. Get intelligent answers.
+                        </p>
+
+                    </div>
+
+
+                    <div class="model-badge">
+                        NEXA ENGINE
+                    </div>
+
+                </div>
+
+
+                <!-- CHAT -->
+
+                <div
+                    id="chatMessages"
+                    class="chat-messages">
+
+
+                    <div class="welcome-message">
+
+                        <div class="welcome-icon">
+                            N
+                        </div>
+
+
+                        <h2>
+                            Hello, I'm NEXA.
+                        </h2>
+
+
+                        <p>
+                            Your personal AI assistant is ready.
+                        </p>
+
+
+                        <div class="suggestions">
+
+                            <button
+                                onclick="useSuggestion('What can you do?')">
+
+                                What can you do?
+
+                            </button>
+
+
+                            <button
+                                onclick="useSuggestion('Explain artificial intelligence simply.')">
+
+                                Explain AI
+
+                            </button>
+
+
+                            <button
+                                onclick="useSuggestion('Give me some useful ideas.')">
+
+                                Give me ideas
+
+                            </button>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <!-- CHAT INPUT -->
+
+                <div class="chat-input-area">
+
+                    <form
+                        id="chatForm"
+                        class="chat-form">
+
+
+                        <textarea
+                            id="chatInput"
+                            rows="1"
+                            placeholder="Ask NEXA anything..."
+                            autocomplete="off"></textarea>
+
+
+                        <button
+                            id="sendButton"
+                            class="send-btn"
+                            type="submit">
+
+                            <span>
+                                ➤
+                            </span>
+
+                        </button>
+
+                    </form>
+
+
+                    <div class="input-hint">
+
+                        Press Enter to send • Shift + Enter for new line
+
+                    </div>
+
+                </div>
+
+            </section>
+
+
+            <!-- ========================= -->
+            <!-- PRO PAGE -->
+            <!-- ========================= -->
+
+            <section
+                id="proPage"
+                class="page">
+
+
+                <div class="page-header">
+
+                    <div>
+
+                        <span class="eyebrow">
+                            PREMIUM ACCESS
+                        </span>
+
+                        <h1>
+                            NEXA Pro
+                        </h1>
+
+                        <p>
+                            Unlock the complete NEXA experience.
+                        </p>
+
+                    </div>
+
+                </div>
+
+
+                <div class="pro-container">
+
+                    <div class="pro-card">
+
+                        <div class="pro-glow"></div>
+
+
+                        <div class="pro-top">
+
+                            <div>
+
+                                <span class="pro-label">
+                                    NEXA PRO
+                                </span>
+
+                                <h2>
+                                    Power up your AI.
+                                </h2>
+
+                            </div>
+
+
+                            <div class="pro-price">
+
+                                <strong>
+                                    ₹99
+                                </strong>
+
+                                <span>
+                                    / month
+                                </span>
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="pro-features">
+
+
+                            <div class="feature">
+
+                                <span>✓</span>
+
+                                <div>
+
+                                    <strong>
+                                        Priority AI
+                                    </strong>
+
+                                    <p>
+                                        Faster and better AI access.
+                                    </p>
+
+                                </div>
+
+                            </div>
+
+
+                            <div class="feature">
+
+                                <span>✓</span>
+
+                                <div>
+
+                                    <strong>
+                                        Advanced Features
+                                    </strong>
+
+                                    <p>
+                                        Unlock additional NEXA tools.
+                                    </p>
+
+                                </div>
+
+                            </div>
+
+
+                            <div class="feature">
+
+                                <span>✓</span>
+
+                                <div>
+
+                                    <strong>
+                                        Higher Limits
+                                    </strong>
+
+                                    <p>
+                                        More usage for your account.
+                                    </p>
+
+                                </div>
+
+                            </div>
+
+
+                            <div class="feature">
+
+                                <span>✓</span>
+
+                                <div>
+
+                                    <strong>
+                                        Pro Badge
+                                    </strong>
+
+                                    <p>
+                                        Show your NEXA Pro status.
+                                    </p>
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+
+                        <div
+                            id="proAction"
+                            class="pro-action">
+
+
+                            <button
+                                class="pro-btn"
+                                onclick="requestPro()">
+
+                                REQUEST PRO ACCESS — ₹99
+
+                            </button>
+
+
+                            <p>
+
+                                No automatic payment is made.
+                                Your request is manually reviewed by the developer.
+
+                            </p>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+
+            <!-- ========================= -->
+            <!-- ACCOUNT PAGE -->
+            <!-- ========================= -->
+
+            <section
+                id="accountPage"
+                class="page">
+
+
+                <div class="page-header">
+
+                    <div>
+
+                        <span class="eyebrow">
+                            PROFILE
+                        </span>
+
+                        <h1>
+                            Your Account
+                        </h1>
+
+                        <p>
+                            Manage your NEXA account.
+                        </p>
+
+                    </div>
+
+                </div>
+
+
+                <div class="account-card">
+
+
+                    <div class="account-avatar">
+                        N
+                    </div>
+
+
+                    <div class="account-details">
+
+                        <span>
+                            USERNAME
+                        </span>
+
+                        <h2 id="accountUsername">
+                            User
+                        </h2>
+
+                    </div>
+
+
+                    <div class="account-details">
+
+                        <span>
+                            PLAN
+                        </span>
+
+                        <h2 id="accountPlan">
+                            FREE
+                        </h2>
+
+                    </div>
+
+
+                    <div class="account-details">
+
+                        <span>
+                            PRO STATUS
+                        </span>
+
+                        <h2 id="accountProStatus">
+                            Not active
+                        </h2>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+        </main>
+
+    </section>
+
+
+    <!-- TOAST -->
+
+    <div
+        id="toast"
+        class="toast">
+    </div>
+
+
+    <!-- LOADING -->
+
+    <div
+        id="loadingOverlay"
+        class="loading-overlay hidden">
+
+        <div class="loader"></div>
+
+        <span>
+            NEXA PROCESSING...
+        </span>
+
+    </div>
+
+
+    <script src="app.js"></script>
+
+</body>
+</html>

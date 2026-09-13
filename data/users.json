@@ -1,0 +1,28 @@
+{
+  "users": [
+    {
+      "id": "eef47be8-59bb-4126-8cdc-f412dc0341b7",
+      "username": "SHUBH.M.DODIYA",
+      "passwordHash": "$2b$10$b7KIXjgLJsVmwYLiBU0rtuUhxinKglUC4ufz1S4h49Tv05TtoUsn2",
+      "plan": "free",
+      "proRequest": "none",
+      "createdAt": "2026-09-13T11:24:39.570Z",
+      "proRequestedAt": "2026-09-13T12:35:39.301Z",
+      "proApprovedAt": "2026-09-13T12:35:43.334Z",
+      "proRevokedAt": "2026-09-13T12:36:20.568Z",
+      "proRejectedAt": "2026-09-13T12:24:19.005Z",
+      "aiMessagesUsed": 1
+    },
+    {
+      "id": "745f24fa-9b8a-4ff0-9acc-0723bde3327a",
+      "username": "keshavhome51@gmail.com",
+      "passwordHash": "$2b$10$aIQHGkBj7bwQMgkVczom0OaylQwLKoJKSh.E71vRB41gHz3iizX9i",
+      "plan": "pro",
+      "proRequest": "approved",
+      "aiMessagesUsed": 1,
+      "createdAt": "2026-09-13T12:38:08.999Z",
+      "proRequestedAt": "2026-09-13T12:38:51.708Z",
+      "proApprovedAt": "2026-09-13T12:38:57.859Z"
+    }
+  ]
+}

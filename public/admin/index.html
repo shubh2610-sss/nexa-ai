@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>NEXA — Developer Console</title>
+
+    <link rel="stylesheet" href="admin.css">
+</head>
+
+<body>
+
+    <div class="background">
+        <div class="orb orb1"></div>
+        <div class="orb orb2"></div>
+        <div class="grid"></div>
+    </div>
+
+
+    <!-- =====================================================
+         ADMIN LOGIN
+         ===================================================== -->
+
+    <section id="loginScreen" class="login-screen">
+
+        <div class="login-card">
+
+            <div class="admin-logo">
+                <div class="logo-ring">
+                    N
+                </div>
+            </div>
+
+            <div class="eyebrow">
+                NEXA SYSTEM
+            </div>
+
+            <h1>
+                Developer
+                <span>Console</span>
+            </h1>
+
+            <p class="login-description">
+                Secure administration and Pro access management
+            </p>
+
+
+            <div class="secure-pill">
+                <span class="secure-dot"></span>
+                DEVELOPER ACCESS
+            </div>
+
+
+            <form id="adminLoginForm">
+
+                <label for="adminPassword">
+                    Developer Password
+                </label>
+
+                <div class="password-box">
+
+                    <input
+                        type="password"
+                        id="adminPassword"
+                        placeholder="Enter developer password"
+                        autocomplete="current-password"
+                        required
+                    >
+
+                    <button
+                        type="button"
+                        id="togglePassword"
+                        class="eye-btn"
+                    >
+                        SHOW
+                    </button>
+
+                </div>
+
+
+                <button
+                    type="submit"
+                    id="loginButton"
+                    class="primary-btn"
+                >
+                    <span>ENTER CONSOLE</span>
+                    <span class="button-arrow">→</span>
+                </button>
+
+            </form>
+
+
+            <div
+                id="loginError"
+                class="error-message"
+            ></div>
+
+
+            <div class="security-note">
+                <span>🔒</span>
+                <div>
+                    <strong>Protected Area</strong>
+                    <small>Authorized developer access only</small>
+                </div>
+            </div>
+
+
+            <a href="/" class="back-link">
+                ← Back to NEXA
+            </a>
+
+        </div>
+
+    </section>
+
+
+    <!-- =====================================================
+         ADMIN DASHBOARD
+         ===================================================== -->
+
+    <section
+        id="dashboardScreen"
+        class="dashboard hidden"
+    >
+
+        <!-- TOP BAR -->
+
+        <header class="topbar">
+
+            <div class="brand">
+
+                <div class="mini-logo">
+                    N
+                </div>
+
+                <div class="brand-text">
+                    <strong>NEXA</strong>
+
+                    <span>
+                        DEVELOPER CONSOLE
+                    </span>
+                </div>
+
+            </div>
+
+
+            <div class="top-actions">
+
+                <div class="online-status">
+                    <i></i>
+                    SYSTEM ONLINE
+                </div>
+
+                <div class="admin-mode-pill">
+                    <span>◆</span>
+                    ADMIN
+                </div>
+
+                <button
+                    id="logoutButton"
+                    class="logout-btn"
+                >
+                    LOGOUT
+                </button>
+
+            </div>
+
+        </header>
+
+
+        <main class="dashboard-content">
+
+
+            <!-- =================================================
+                 PAGE HEADING
+                 ================================================= -->
+
+            <div class="page-heading">
+
+                <div>
+
+                    <div class="eyebrow">
+                        ADMINISTRATION
+                    </div>
+
+                    <h1>
+                        Command
+                        <span>Center</span>
+                    </h1>
+
+                    <p>
+                        Manage users, Pro requests and account access.
+                    </p>
+
+                </div>
+
+
+                <button
+                    id="refreshButton"
+                    class="refresh-btn"
+                >
+                    <span class="refresh-icon">↻</span>
+                    Refresh Data
+                </button>
+
+            </div>
+
+
+            <!-- =================================================
+                 QUICK OVERVIEW
+                 ================================================= -->
+
+            <section class="overview-banner">
+
+                <div class="overview-icon">
+                    💎
+                </div>
+
+                <div class="overview-content">
+
+                    <div class="overview-title">
+                        NEXA PRO MANAGEMENT
+                    </div>
+
+                    <p>
+                        Review Pro requests and manually control
+                        unlimited AI access for approved users.
+                    </p>
+
+                </div>
+
+                <div class="overview-price">
+                    <span>PRO ACCESS</span>
+                    <strong>₹99</strong>
+                    <small>/ month</small>
+                </div>
+
+            </section>
+
+
+            <!-- =================================================
+                 STATISTICS
+                 ================================================= -->
+
+            <section class="stats-grid">
+
+                <div class="stat-card">
+
+                    <div class="stat-icon">
+                        👥
+                    </div>
+
+                    <div class="stat-info">
+                        <span>Total Users</span>
+                        <strong id="totalUsers">0</strong>
+                        <small>Registered accounts</small>
+                    </div>
+
+                </div>
+
+
+                <div class="stat-card pro-stat">
+
+                    <div class="stat-icon">
+                        💎
+                    </div>
+
+                    <div class="stat-info">
+                        <span>Pro Users</span>
+                        <strong id="totalPro">0</strong>
+                        <small>Unlimited AI access</small>
+                    </div>
+
+                </div>
+
+
+                <div class="stat-card pending-stat">
+
+                    <div class="stat-icon">
+                        ⏳
+                    </div>
+
+                    <div class="stat-info">
+                        <span>Pending Requests</span>
+                        <strong id="totalPending">0</strong>
+                        <small>Waiting for review</small>
+                    </div>
+
+                </div>
+
+
+                <div class="stat-card free-stat">
+
+                    <div class="stat-icon">
+                        🆓
+                    </div>
+
+                    <div class="stat-info">
+                        <span>Free Users</span>
+                        <strong id="totalFree">0</strong>
+                        <small>Limited AI access</small>
+                    </div>
+
+                </div>
+
+            </section>
+
+
+            <!-- =================================================
+                 PRO REQUEST MANAGEMENT
+                 ================================================= -->
+
+            <section class="panel pro-management-panel">
+
+                <div class="panel-header">
+
+                    <div class="panel-heading-left">
+
+                        <div class="panel-icon pro-icon">
+                            💎
+                        </div>
+
+                        <div>
+
+                            <span class="panel-label">
+                                PRO MANAGEMENT
+                            </span>
+
+                            <h2>
+                                Pro Access Requests
+                            </h2>
+
+                            <p>
+                                Review and manage users requesting unlimited AI access.
+                            </p>
+
+                        </div>
+
+                    </div>
+
+
+                    <span
+                        id="pendingBadge"
+                        class="badge pending-badge"
+                    >
+                        0 pending
+                    </span>
+
+                </div>
+
+
+                <div
+                    id="pendingRequests"
+                    class="request-list"
+                ></div>
+
+            </section>
+
+
+            <!-- =================================================
+                 USERS
+                 ================================================= -->
+
+            <section class="panel users-panel">
+
+                <div class="panel-header">
+
+                    <div class="panel-heading-left">
+
+                        <div class="panel-icon users-icon">
+                            👥
+                        </div>
+
+                        <div>
+
+                            <span class="panel-label">
+                                USER DATABASE
+                            </span>
+
+                            <h2>
+                                All Users
+                            </h2>
+
+                            <p>
+                                View account plans and Pro request status.
+                            </p>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="search-wrapper">
+
+                        <span class="search-icon">
+                            ⌕
+                        </span>
+
+                        <input
+                            type="search"
+                            id="userSearch"
+                            class="search-input"
+                            placeholder="Search users..."
+                        >
+
+                    </div>
+
+                </div>
+
+
+                <div class="table-wrapper">
+
+                    <table>
+
+                        <thead>
+
+                            <tr>
+                                <th>USER</th>
+                                <th>PLAN</th>
+                                <th>AI USAGE</th>
+                                <th>REQUEST</th>
+                                <th>CREATED</th>
+                                <th>ACTIONS</th>
+                            </tr>
+
+                        </thead>
+
+                        <tbody id="usersTableBody"></tbody>
+
+                    </table>
+
+                </div>
+
+            </section>
+
+
+            <!-- =================================================
+                 SYSTEM INFORMATION
+                 ================================================= -->
+
+            <section class="system-section">
+
+                <div class="system-heading">
+                    <span class="panel-label">
+                        SYSTEM STATUS
+                    </span>
+
+                    <h2>
+                        NEXA Infrastructure
+                    </h2>
+                </div>
+
+
+                <div class="system-panel">
+
+                    <div class="system-item">
+                        <span>SERVER</span>
+                        <strong>
+                            <i class="status-dot"></i>
+                            localhost:3000
+                        </strong>
+                    </div>
+
+                    <div class="system-item">
+                        <span>AUTHENTICATION</span>
+                        <strong class="green-text">
+                            ● ACTIVE
+                        </strong>
+                    </div>
+
+                    <div class="system-item">
+                        <span>DATABASE</span>
+                        <strong>
+                            users.json
+                        </strong>
+                    </div>
+
+                    <div class="system-item">
+                        <span>ADMIN MODE</span>
+                        <strong class="cyan-text">
+                            ◆ SECURE
+                        </strong>
+                    </div>
+
+                </div>
+
+            </section>
+
+
+            <footer class="admin-footer">
+                NEXA AI • Developer Console • Secure Administration
+            </footer>
+
+        </main>
+
+    </section>
+
+
+    <!-- =====================================================
+         CONFIRMATION MODAL
+         ===================================================== -->
+
+    <div
+        id="confirmModal"
+        class="modal-overlay hidden"
+    >
+
+        <div class="confirm-modal">
+
+            <div
+                id="confirmIcon"
+                class="confirm-icon"
+            >
+                💎
+            </div>
+
+            <div class="confirm-eyebrow">
+                ACTION REQUIRED
+            </div>
+
+            <h2 id="confirmTitle">
+                Approve Pro Access?
+            </h2>
+
+            <p id="confirmMessage">
+                Are you sure you want to approve this request?
+            </p>
+
+
+            <div class="confirm-user-card">
+
+                <div class="confirm-avatar">
+                    N
+                </div>
+
+                <div>
+                    <span>User</span>
+                    <strong id="confirmUsername">
+                        —
+                    </strong>
+                </div>
+
+            </div>
+
+
+            <div class="confirm-actions">
+
+                <button
+                    id="confirmCancel"
+                    class="modal-cancel"
+                >
+                    CANCEL
+                </button>
+
+                <button
+                    id="confirmAction"
+                    class="modal-confirm"
+                >
+                    CONFIRM
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- =====================================================
+         TOAST
+         ===================================================== -->
+
+    <div
+        id="toast"
+        class="toast"
+    ></div>
+
+
+    <script src="admin.js"></script>
+
+</body>
+
+</html>
