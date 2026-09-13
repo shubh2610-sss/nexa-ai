@@ -1,4 +1,3 @@
-
 /* =========================================================
    NEXA AI — USER APP
    Complete client-side controller
@@ -17,9 +16,7 @@ const state = {
         "",
 
     user: null,
-
     sending: false,
-
     initialized: false
 };
 
@@ -38,7 +35,6 @@ function $(id) {
    ========================================================= */
 
 function showToast(message, duration = 3500) {
-
     const toast = $("toast");
 
     if (!toast) {
@@ -47,7 +43,6 @@ function showToast(message, duration = 3500) {
     }
 
     toast.textContent = message;
-
     toast.classList.add("show");
 
     clearTimeout(window.nexaToastTimer);
@@ -63,7 +58,6 @@ function showToast(message, duration = 3500) {
    ========================================================= */
 
 function setLoading(show) {
-
     const overlay = $("loadingOverlay");
 
     if (!overlay) return;
@@ -81,32 +75,20 @@ function setLoading(show) {
    ========================================================= */
 
 function saveSession(sessionId) {
-
     state.token = sessionId || "";
 
     if (state.token) {
-
-        localStorage.setItem(
-            "nexa_session",
-            state.token
-        );
-
-        localStorage.setItem(
-            "nexa_token",
-            state.token
-        );
+        localStorage.setItem("nexa_session", state.token);
+        localStorage.setItem("nexa_token", state.token);
     }
 }
 
 
 function clearSession() {
-
     state.token = "";
-
     state.user = null;
 
     localStorage.removeItem("nexa_session");
-
     localStorage.removeItem("nexa_token");
 }
 
@@ -116,88 +98,58 @@ function clearSession() {
    ========================================================= */
 
 async function api(url, options = {}) {
-
     const config = {
         ...options,
-
         headers: {
             ...(options.headers || {})
         }
     };
 
-
     if (
         options.body &&
         typeof options.body !== "string"
     ) {
-
-        config.headers["Content-Type"] =
-            "application/json";
-
-        config.body =
-            JSON.stringify(options.body);
+        config.headers["Content-Type"] = "application/json";
+        config.body = JSON.stringify(options.body);
     }
 
-
     if (state.token) {
-
-        config.headers["x-session-id"] =
-            state.token;
-
+        config.headers["x-session-id"] = state.token;
         config.headers["Authorization"] =
             "Bearer " + state.token;
     }
 
-
     let response;
 
     try {
-
-        response = await fetch(
-            url,
-            config
-        );
-
+        response = await fetch(url, config);
     } catch (error) {
-
         throw new Error(
             "Unable to connect to NEXA server. Please check your internet connection."
         );
     }
 
-
     let data = {};
 
     try {
-
         data = await response.json();
-
     } catch {
-
         data = {};
     }
 
-
     if (!response.ok) {
-
         const error = new Error(
             data.error ||
             data.message ||
             `Request failed (${response.status})`
         );
 
-        error.status =
-            response.status;
-
-        error.code =
-            data.code;
-
-        error.data =
-            data;
+        error.status = response.status;
+        error.code = data.code;
+        error.data = data;
 
         throw error;
     }
-
 
     return data;
 }
@@ -208,71 +160,37 @@ async function api(url, options = {}) {
    ========================================================= */
 
 function showAuth(type) {
+    const loginForm = $("loginForm");
+    const registerForm = $("registerForm");
 
-    const loginForm =
-        $("loginForm");
-
-    const registerForm =
-        $("registerForm");
-
-    const loginTab =
-        $("loginTab");
-
-    const registerTab =
-        $("registerTab");
-
+    const loginTab = $("loginTab");
+    const registerTab = $("registerTab");
 
     if (!loginForm || !registerForm) {
         return;
     }
 
-
     if (type === "register") {
-
-        loginForm.classList.add(
-            "hidden"
-        );
-
-        registerForm.classList.remove(
-            "hidden"
-        );
-
+        loginForm.classList.add("hidden");
+        registerForm.classList.remove("hidden");
 
         if (loginTab) {
-            loginTab.classList.remove(
-                "active"
-            );
+            loginTab.classList.remove("active");
         }
-
 
         if (registerTab) {
-            registerTab.classList.add(
-                "active"
-            );
+            registerTab.classList.add("active");
         }
-
     } else {
-
-        registerForm.classList.add(
-            "hidden"
-        );
-
-        loginForm.classList.remove(
-            "hidden"
-        );
-
+        registerForm.classList.add("hidden");
+        loginForm.classList.remove("hidden");
 
         if (registerTab) {
-            registerTab.classList.remove(
-                "active"
-            );
+            registerTab.classList.remove("active");
         }
 
-
         if (loginTab) {
-            loginTab.classList.add(
-                "active"
-            );
+            loginTab.classList.add("active");
         }
     }
 }
@@ -283,27 +201,16 @@ function showAuth(type) {
    ========================================================= */
 
 function showApp() {
-
-    const authScreen =
-        $("authScreen");
-
-    const appScreen =
-        $("appScreen");
-
+    const authScreen = $("authScreen");
+    const appScreen = $("appScreen");
 
     if (authScreen) {
-        authScreen.classList.add(
-            "hidden"
-        );
+        authScreen.classList.add("hidden");
     }
-
 
     if (appScreen) {
-        appScreen.classList.remove(
-            "hidden"
-        );
+        appScreen.classList.remove("hidden");
     }
-
 
     updateUserUI();
 }
@@ -314,27 +221,16 @@ function showApp() {
    ========================================================= */
 
 function showLogin() {
-
-    const authScreen =
-        $("authScreen");
-
-    const appScreen =
-        $("appScreen");
-
+    const authScreen = $("authScreen");
+    const appScreen = $("appScreen");
 
     if (appScreen) {
-        appScreen.classList.add(
-            "hidden"
-        );
+        appScreen.classList.add("hidden");
     }
-
 
     if (authScreen) {
-        authScreen.classList.remove(
-            "hidden"
-        );
+        authScreen.classList.remove("hidden");
     }
-
 
     showAuth("login");
 }
@@ -345,59 +241,38 @@ function showLogin() {
    ========================================================= */
 
 async function login(event) {
-
     if (event) {
         event.preventDefault();
     }
 
+    const usernameInput = $("loginUsername");
+    const passwordInput = $("loginPassword");
 
-    const usernameInput =
-        $("loginUsername");
+    const username = usernameInput
+        ? usernameInput.value.trim()
+        : "";
 
-    const passwordInput =
-        $("loginPassword");
-
-
-    const username =
-        usernameInput
-            ? usernameInput.value.trim()
-            : "";
-
-
-    const password =
-        passwordInput
-            ? passwordInput.value
-            : "";
-
+    const password = passwordInput
+        ? passwordInput.value
+        : "";
 
     if (!username || !password) {
-
         showToast(
             "⚠️ Enter your username and password."
         );
-
         return;
     }
 
-
     setLoading(true);
 
-
     try {
-
-        const result =
-            await api(
-                "/api/login",
-                {
-                    method: "POST",
-
-                    body: {
-                        username,
-                        password
-                    }
-                }
-            );
-
+        const result = await api("/api/login", {
+            method: "POST",
+            body: {
+                username,
+                password
+            }
+        });
 
         const sessionId =
             result.sessionId ||
@@ -405,40 +280,28 @@ async function login(event) {
             result.session ||
             "";
 
-
         if (!sessionId) {
-
             throw new Error(
                 "Login succeeded but no session was returned."
             );
         }
 
-
         saveSession(sessionId);
 
-
-        state.user =
-            result.user || null;
-
+        state.user = result.user || null;
 
         if (!state.user) {
-
             await refreshCurrentUser();
         }
 
-
         if (!state.user) {
-
             throw new Error(
                 "Unable to load your account."
             );
         }
 
-
         showApp();
-
         navigateTo("chatPage");
-
 
         showToast(
             "✅ Welcome back, " +
@@ -446,33 +309,23 @@ async function login(event) {
             "!"
         );
 
-
         if (usernameInput) {
             usernameInput.value = "";
         }
-
 
         if (passwordInput) {
             passwordInput.value = "";
         }
 
-
     } catch (error) {
-
         clearSession();
-
 
         showToast(
             "⚠️ " +
-            (
-                error.message ||
-                "Login failed."
-            )
+            (error.message || "Login failed.")
         );
 
-
     } finally {
-
         setLoading(false);
     }
 }
@@ -483,102 +336,64 @@ async function login(event) {
    ========================================================= */
 
 async function register(event) {
-
     if (event) {
         event.preventDefault();
     }
 
+    const usernameInput = $("registerUsername");
+    const passwordInput = $("registerPassword");
+    const confirmInput = $("registerConfirm");
 
-    const usernameInput =
-        $("registerUsername");
+    const username = usernameInput
+        ? usernameInput.value.trim()
+        : "";
 
-    const passwordInput =
-        $("registerPassword");
+    const password = passwordInput
+        ? passwordInput.value
+        : "";
 
-    const confirmInput =
-        $("registerConfirm");
+    const confirm = confirmInput
+        ? confirmInput.value
+        : "";
 
-
-    const username =
-        usernameInput
-            ? usernameInput.value.trim()
-            : "";
-
-
-    const password =
-        passwordInput
-            ? passwordInput.value
-            : "";
-
-
-    const confirm =
-        confirmInput
-            ? confirmInput.value
-            : "";
-
-
-    if (
-        !username ||
-        !password ||
-        !confirm
-    ) {
-
+    if (!username || !password || !confirm) {
         showToast(
             "⚠️ Please fill in all fields."
         );
-
         return;
     }
 
-
     if (username.length < 3) {
-
         showToast(
             "⚠️ Username must be at least 3 characters."
         );
-
         return;
     }
 
-
     if (password.length < 4) {
-
         showToast(
             "⚠️ Password must be at least 4 characters."
         );
-
         return;
     }
 
-
     if (password !== confirm) {
-
         showToast(
             "⚠️ Passwords do not match."
         );
-
         return;
     }
 
-
     setLoading(true);
 
-
     try {
-
-        const result =
-            await api(
-                "/api/register",
-                {
-                    method: "POST",
-
-                    body: {
-                        username,
-                        password
-                    }
-                }
-            );
-
+        const result = await api("/api/register", {
+            method: "POST",
+            body: {
+                username,
+                password
+            }
+        });
 
         const sessionId =
             result.sessionId ||
@@ -586,73 +401,52 @@ async function register(event) {
             result.session ||
             "";
 
-
         if (!sessionId) {
-
             throw new Error(
                 "Account created, but no login session was returned."
             );
         }
 
-
         saveSession(sessionId);
 
-
-        state.user =
-            result.user || null;
-
+        state.user = result.user || null;
 
         if (!state.user) {
             await refreshCurrentUser();
         }
 
-
         if (!state.user) {
-
             throw new Error(
                 "Unable to load your account."
             );
         }
 
-
         showApp();
-
         navigateTo("chatPage");
-
 
         showToast(
             "✅ Account created successfully!"
         );
 
-
         if (usernameInput) {
             usernameInput.value = "";
         }
-
 
         if (passwordInput) {
             passwordInput.value = "";
         }
 
-
         if (confirmInput) {
             confirmInput.value = "";
         }
 
-
     } catch (error) {
-
         showToast(
             "⚠️ " +
-            (
-                error.message ||
-                "Registration failed."
-            )
+            (error.message || "Registration failed.")
         );
 
-
     } finally {
-
         setLoading(false);
     }
 }
@@ -663,25 +457,15 @@ async function register(event) {
    ========================================================= */
 
 async function refreshCurrentUser() {
-
     if (!state.token) {
-
         state.user = null;
-
         return null;
     }
 
-
     try {
-
-        const result =
-            await api(
-                "/api/me",
-                {
-                    method: "GET"
-                }
-            );
-
+        const result = await api("/api/me", {
+            method: "GET"
+        });
 
         state.user =
             result.user ||
@@ -689,31 +473,23 @@ async function refreshCurrentUser() {
             result ||
             null;
 
-
         if (
             state.user &&
             state.user.user
         ) {
-
-            state.user =
-                state.user.user;
+            state.user = state.user.user;
         }
-
 
         if (state.user) {
             updateUserUI();
         }
 
-
         return state.user;
 
-
     } catch (error) {
-
         if (error.status === 401) {
             clearSession();
         }
-
 
         state.user = null;
 
@@ -727,25 +503,17 @@ async function refreshCurrentUser() {
    ========================================================= */
 
 function updateUserUI() {
-
     if (!state.user) return;
 
-
     const username =
-        state.user.username ||
-        "User";
-
+        state.user.username || "User";
 
     const plan =
         String(
-            state.user.plan ||
-            "free"
+            state.user.plan || "free"
         ).toLowerCase();
 
-
-    const isPro =
-        plan === "pro";
-
+    const isPro = plan === "pro";
 
     const sidebarUsername =
         $("sidebarUsername");
@@ -765,56 +533,41 @@ function updateUserUI() {
     const accountProStatus =
         $("accountProStatus");
 
-
     if (sidebarUsername) {
-
-        sidebarUsername.textContent =
-            username;
+        sidebarUsername.textContent = username;
     }
 
-
     if (sidebarPlan) {
-
         sidebarPlan.textContent =
             isPro
                 ? "NEXA PRO"
                 : "FREE PLAN";
     }
 
-
     if (mobilePlan) {
-
         mobilePlan.textContent =
             isPro
                 ? "PRO"
                 : "FREE";
     }
 
-
     if (accountUsername) {
-
-        accountUsername.textContent =
-            username;
+        accountUsername.textContent = username;
     }
 
-
     if (accountPlan) {
-
         accountPlan.textContent =
             isPro
                 ? "NEXA PRO"
                 : "FREE";
     }
 
-
     if (accountProStatus) {
-
         accountProStatus.textContent =
             isPro
                 ? "Active"
                 : "Not active";
     }
-
 
     updateProPage();
 }
@@ -825,34 +578,23 @@ function updateUserUI() {
    ========================================================= */
 
 function getProRequestStatus() {
-
     if (
         !state.user ||
         !state.user.proRequest
     ) {
-
         return "";
     }
-
 
     const request =
         state.user.proRequest;
 
-
-    if (
-        typeof request ===
-        "object"
-    ) {
-
+    if (typeof request === "object") {
         return String(
             request.status || ""
         ).toLowerCase();
     }
 
-
-    return String(
-        request
-    ).toLowerCase();
+    return String(request).toLowerCase();
 }
 
 
@@ -861,29 +603,18 @@ function getProRequestStatus() {
    ========================================================= */
 
 function updateProPage() {
+    const action = $("proAction");
 
-    const action =
-        $("proAction");
-
-
-    if (
-        !action ||
-        !state.user
-    ) {
-
+    if (!action || !state.user) {
         return;
     }
 
-
     const plan =
         String(
-            state.user.plan ||
-            "free"
+            state.user.plan || "free"
         ).toLowerCase();
 
-
     if (plan === "pro") {
-
         action.innerHTML = `
             <div class="pro-active">
                 <strong>✓ NEXA PRO ACTIVE</strong>
@@ -894,16 +625,12 @@ function updateProPage() {
         return;
     }
 
-
-    const status =
-        getProRequestStatus();
-
+    const status = getProRequestStatus();
 
     if (
         status === "pending" ||
         status === "requested"
     ) {
-
         action.innerHTML = `
             <div class="pro-pending">
                 <strong>⏳ PRO REQUEST PENDING</strong>
@@ -917,9 +644,7 @@ function updateProPage() {
                     class="pro-btn"
                     type="button"
                     onclick="cancelProRequest()">
-
                     CANCEL REQUEST
-
                 </button>
             </div>
         `;
@@ -927,15 +652,12 @@ function updateProPage() {
         return;
     }
 
-
     if (
         status === "rejected" ||
         status === "revoked"
     ) {
-
         action.innerHTML = `
             <div class="pro-rejected">
-
                 <strong>
                     ⚠ PRO REQUEST ${status.toUpperCase()}
                 </strong>
@@ -948,26 +670,20 @@ function updateProPage() {
                     class="pro-btn"
                     type="button"
                     onclick="requestPro()">
-
                     REQUEST PRO ACCESS — ₹99
-
                 </button>
-
             </div>
         `;
 
         return;
     }
 
-
     action.innerHTML = `
         <button
             class="pro-btn"
             type="button"
             onclick="requestPro()">
-
             REQUEST PRO ACCESS — ₹99
-
         </button>
 
         <p>
@@ -983,21 +699,13 @@ function updateProPage() {
    ========================================================= */
 
 async function requestPro() {
-
     if (!state.token) {
-
-        showToast(
-            "⚠️ Please login first."
-        );
-
+        showToast("⚠️ Please login first.");
         showLogin();
-
         return;
     }
 
-
     if (!state.user) {
-
         setLoading(true);
 
         try {
@@ -1007,11 +715,8 @@ async function requestPro() {
         }
     }
 
-
     if (!state.user) {
-
         clearSession();
-
         showLogin();
 
         showToast(
@@ -1021,16 +726,12 @@ async function requestPro() {
         return;
     }
 
-
     const currentPlan =
         String(
-            state.user.plan ||
-            "free"
+            state.user.plan || "free"
         ).toLowerCase();
 
-
     if (currentPlan === "pro") {
-
         showToast(
             "✅ You already have NEXA Pro."
         );
@@ -1040,16 +741,13 @@ async function requestPro() {
         return;
     }
 
-
     const currentStatus =
         getProRequestStatus();
-
 
     if (
         currentStatus === "pending" ||
         currentStatus === "requested"
     ) {
-
         showToast(
             "⏳ Your Pro request is already pending."
         );
@@ -1057,12 +755,9 @@ async function requestPro() {
         return;
     }
 
-
     setLoading(true);
 
-
     try {
-
         const result =
             await api(
                 "/api/pro/request",
@@ -1071,28 +766,20 @@ async function requestPro() {
                 }
             );
 
-
         state.user =
             result.user ||
             state.user;
 
-
         updateUserUI();
-
         updateProPage();
-
 
         showToast(
             "✅ Pro request sent to the developer."
         );
 
-
     } catch (error) {
-
         if (error.status === 401) {
-
             clearSession();
-
             showLogin();
 
             showToast(
@@ -1102,7 +789,6 @@ async function requestPro() {
             return;
         }
 
-
         showToast(
             "⚠️ " +
             (
@@ -1111,9 +797,7 @@ async function requestPro() {
             )
         );
 
-
     } finally {
-
         setLoading(false);
     }
 }
@@ -1124,24 +808,15 @@ async function requestPro() {
    ========================================================= */
 
 async function cancelProRequest() {
-
     if (!state.token) {
-
-        showToast(
-            "⚠️ Please login first."
-        );
-
+        showToast("⚠️ Please login first.");
         showLogin();
-
         return;
     }
 
-
     setLoading(true);
 
-
     try {
-
         const result =
             await api(
                 "/api/pro/cancel",
@@ -1150,28 +825,20 @@ async function cancelProRequest() {
                 }
             );
 
-
         state.user =
             result.user ||
             state.user;
 
-
         updateUserUI();
-
         updateProPage();
-
 
         showToast(
             "✅ Pro request cancelled."
         );
 
-
     } catch (error) {
-
         if (error.status === 401) {
-
             clearSession();
-
             showLogin();
 
             showToast(
@@ -1181,7 +848,6 @@ async function cancelProRequest() {
             return;
         }
 
-
         showToast(
             "⚠️ " +
             (
@@ -1190,9 +856,7 @@ async function cancelProRequest() {
             )
         );
 
-
     } finally {
-
         setLoading(false);
     }
 }
@@ -1203,69 +867,35 @@ async function cancelProRequest() {
    ========================================================= */
 
 function navigateTo(pageId) {
-
     const pages =
-        document.querySelectorAll(
-            ".page"
-        );
-
+        document.querySelectorAll(".page");
 
     const buttons =
-        document.querySelectorAll(
-            ".nav-btn"
-        );
-
+        document.querySelectorAll(".nav-btn");
 
     pages.forEach(page => {
-
-        page.classList.remove(
-            "active-page"
-        );
+        page.classList.remove("active-page");
     });
-
 
     buttons.forEach(button => {
-
-        button.classList.remove(
-            "active"
-        );
+        button.classList.remove("active");
     });
 
-
-    const target =
-        $(pageId);
-
+    const target = $(pageId);
 
     if (target) {
-
-        target.classList.add(
-            "active-page"
-        );
+        target.classList.add("active-page");
     }
 
-
     buttons.forEach(button => {
-
-        if (
-            button.dataset.page ===
-            pageId
-        ) {
-
-            button.classList.add(
-                "active"
-            );
+        if (button.dataset.page === pageId) {
+            button.classList.add("active");
         }
     });
 
-
-    if (
-        pageId ===
-        "proPage"
-    ) {
-
+    if (pageId === "proPage") {
         updateProPage();
     }
-
 
     toggleSidebar(false);
 }
@@ -1276,75 +906,45 @@ function navigateTo(pageId) {
    ========================================================= */
 
 function toggleSidebar(force) {
-
-    const sidebar =
-        $("sidebar");
-
+    const sidebar = $("sidebar");
 
     if (!sidebar) return;
 
-
-    if (
-        typeof force ===
-        "boolean"
-    ) {
-
+    if (typeof force === "boolean") {
         if (force) {
-
-            sidebar.classList.add(
-                "open"
-            );
-
+            sidebar.classList.add("open");
         } else {
-
-            sidebar.classList.remove(
-                "open"
-            );
+            sidebar.classList.remove("open");
         }
 
         return;
     }
 
-
-    sidebar.classList.toggle(
-        "open"
-    );
+    sidebar.classList.toggle("open");
 }
 
 
 /* =========================================================
-   CHAT MESSAGE
+   ADD USER MESSAGE
    ========================================================= */
 
 function addUserMessage(message) {
-
-    const chat =
-        $("chatMessages");
-
+    const chat = $("chatMessages");
 
     if (!chat) return;
 
-
     const welcome =
-        chat.querySelector(
-            ".welcome-message"
-        );
-
+        chat.querySelector(".welcome-message");
 
     if (welcome) {
         welcome.remove();
     }
 
-
     const wrapper =
-        document.createElement(
-            "div"
-        );
-
+        document.createElement("div");
 
     wrapper.className =
         "message user-message";
-
 
     wrapper.innerHTML = `
         <div class="message-avatar">
@@ -1354,51 +954,33 @@ function addUserMessage(message) {
         <div class="message-content"></div>
     `;
 
-
     const content =
-        wrapper.querySelector(
-            ".message-content"
-        );
-
+        wrapper.querySelector(".message-content");
 
     if (content) {
-
-        content.textContent =
-            message;
+        content.textContent = message;
     }
 
-
-    chat.appendChild(
-        wrapper
-    );
-
+    chat.appendChild(wrapper);
 
     scrollChatToBottom();
 }
 
 
 /* =========================================================
-   ASSISTANT MESSAGE
+   ADD ASSISTANT MESSAGE
    ========================================================= */
 
 function addAssistantMessage(message) {
-
-    const chat =
-        $("chatMessages");
-
+    const chat = $("chatMessages");
 
     if (!chat) return null;
 
-
     const wrapper =
-        document.createElement(
-            "div"
-        );
-
+        document.createElement("div");
 
     wrapper.className =
         "message assistant-message";
-
 
     wrapper.innerHTML = `
         <div class="message-avatar">
@@ -1408,29 +990,17 @@ function addAssistantMessage(message) {
         <div class="message-content"></div>
     `;
 
-
     const content =
-        wrapper.querySelector(
-            ".message-content"
-        );
-
+        wrapper.querySelector(".message-content");
 
     if (content) {
-
         content.innerHTML =
-            formatAssistantText(
-                message
-            );
+            formatAssistantText(message);
     }
 
-
-    chat.appendChild(
-        wrapper
-    );
-
+    chat.appendChild(wrapper);
 
     scrollChatToBottom();
-
 
     return wrapper;
 }
@@ -1441,23 +1011,15 @@ function addAssistantMessage(message) {
    ========================================================= */
 
 function addTypingMessage() {
-
-    const chat =
-        $("chatMessages");
-
+    const chat = $("chatMessages");
 
     if (!chat) return null;
 
-
     const wrapper =
-        document.createElement(
-            "div"
-        );
-
+        document.createElement("div");
 
     wrapper.className =
         "message assistant-message typing-message";
-
 
     wrapper.innerHTML = `
         <div class="message-avatar">
@@ -1471,14 +1033,9 @@ function addTypingMessage() {
         </div>
     `;
 
-
-    chat.appendChild(
-        wrapper
-    );
-
+    chat.appendChild(wrapper);
 
     scrollChatToBottom();
-
 
     return wrapper;
 }
@@ -1489,7 +1046,6 @@ function addTypingMessage() {
    ========================================================= */
 
 function escapeHtml(text) {
-
     return String(text)
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
@@ -1504,30 +1060,19 @@ function escapeHtml(text) {
    ========================================================= */
 
 function formatAssistantText(text) {
+    let safe = escapeHtml(text || "");
 
-    let safe =
-        escapeHtml(
-            text || ""
-        );
+    // Markdown bold
+    safe = safe.replace(
+        /\*\*(.*?)\*\*/g,
+        "<strong>$1</strong>"
+    );
 
-
-    /* Correct Markdown bold */
-
-    safe =
-        safe.replace(
-            /\*\*(.*?)\*\*/g,
-            "<strong>$1</strong>"
-        );
-
-
-    /* Convert new lines */
-
-    safe =
-        safe.replace(
-            /\n/g,
-            "<br>"
-        );
-
+    // New lines
+    safe = safe.replace(
+        /\n/g,
+        "<br>"
+    );
 
     return safe;
 }
@@ -1538,18 +1083,12 @@ function formatAssistantText(text) {
    ========================================================= */
 
 function scrollChatToBottom() {
-
-    const chat =
-        $("chatMessages");
-
+    const chat = $("chatMessages");
 
     if (!chat) return;
 
-
     requestAnimationFrame(() => {
-
-        chat.scrollTop =
-            chat.scrollHeight;
+        chat.scrollTop = chat.scrollHeight;
     });
 }
 
@@ -1558,46 +1097,18 @@ function scrollChatToBottom() {
    GET CHAT INPUT
    ========================================================= */
 
-/*
-   IMPORTANT:
-   This function deliberately does NOT rely only on
-   form.elements.namedItem().
-
-   It directly searches inside #chatForm for the textarea.
-*/
-
 function getChatInput() {
+    const input = document.getElementById("chatInput");
 
-    const form =
-        $("chatForm");
+    if (!input) {
+        console.error(
+            "NEXA: #chatInput was not found."
+        );
 
-
-    if (form) {
-
-        const textarea =
-            form.querySelector(
-                "textarea#chatInput"
-            );
-
-
-        if (textarea) {
-            return textarea;
-        }
-
-
-        const anyTextarea =
-            form.querySelector(
-                "textarea"
-            );
-
-
-        if (anyTextarea) {
-            return anyTextarea;
-        }
+        return null;
     }
 
-
-    return $("chatInput");
+    return input;
 }
 
 
@@ -1606,22 +1117,18 @@ function getChatInput() {
    ========================================================= */
 
 async function sendMessage(event) {
-
     if (event) {
         event.preventDefault();
+        event.stopPropagation();
     }
 
+    console.log(
+        "NEXA: sendMessage() called"
+    );
 
-    /* -----------------------------------------------
-       ALWAYS GET THE ACTUAL TEXTAREA
-       ----------------------------------------------- */
-
-    const input =
-        getChatInput();
-
+    const input = getChatInput();
 
     if (!input) {
-
         showToast(
             "⚠️ Chat input not found."
         );
@@ -1629,23 +1136,25 @@ async function sendMessage(event) {
         return;
     }
 
-
-    /* -----------------------------------------------
-       READ VALUE
-       ----------------------------------------------- */
+    /*
+       IMPORTANT:
+       Read the value BEFORE doing anything else.
+    */
 
     const message =
-        String(
-            input.value || ""
-        ).trim();
+        String(input.value || "").trim();
 
+    console.log(
+        "NEXA: input value =",
+        input.value
+    );
 
-    /* -----------------------------------------------
-       EMPTY MESSAGE CHECK
-       ----------------------------------------------- */
+    console.log(
+        "NEXA: message =",
+        message
+    );
 
     if (!message) {
-
         showToast(
             "⚠️ Please enter a message."
         );
@@ -1655,22 +1164,11 @@ async function sendMessage(event) {
         return;
     }
 
-
-    /* -----------------------------------------------
-       DUPLICATE REQUEST PROTECTION
-       ----------------------------------------------- */
-
     if (state.sending) {
         return;
     }
 
-
-    /* -----------------------------------------------
-       AUTHENTICATION
-       ----------------------------------------------- */
-
     if (!state.token) {
-
         showToast(
             "⚠️ Please login first."
         );
@@ -1680,30 +1178,18 @@ async function sendMessage(event) {
         return;
     }
 
-
-    /* -----------------------------------------------
-       RESTORE USER
-       ----------------------------------------------- */
-
     if (!state.user) {
-
         setLoading(true);
 
         try {
-
             await refreshCurrentUser();
-
         } finally {
-
             setLoading(false);
         }
     }
 
-
     if (!state.user) {
-
         clearSession();
-
         showLogin();
 
         showToast(
@@ -1713,74 +1199,38 @@ async function sendMessage(event) {
         return;
     }
 
-
-    /* -----------------------------------------------
-       START SENDING
-       ----------------------------------------------- */
-
     state.sending = true;
-
 
     const sendButton =
         $("sendButton");
-
 
     if (sendButton) {
         sendButton.disabled = true;
     }
 
-
-    /* -----------------------------------------------
-       SHOW USER MESSAGE
-       ----------------------------------------------- */
-
-    addUserMessage(
-        message
-    );
-
-
-    /* -----------------------------------------------
-       CLEAR INPUT
-       ----------------------------------------------- */
+    addUserMessage(message);
 
     input.value = "";
-
-    input.style.height =
-        "auto";
-
-
-    /* -----------------------------------------------
-       TYPING INDICATOR
-       ----------------------------------------------- */
+    input.style.height = "auto";
 
     const typing =
         addTypingMessage();
 
-
     try {
-
         const result =
             await api(
                 "/api/chat",
                 {
                     method: "POST",
-
                     body: {
-                        message:
-                            message
+                        message: message
                     }
                 }
             );
 
-
         if (typing) {
             typing.remove();
         }
-
-
-        /* -------------------------------------------
-           GET RESPONSE
-           ------------------------------------------- */
 
         const answer =
             result.reply ||
@@ -1789,104 +1239,54 @@ async function sendMessage(event) {
             result.text ||
             "";
 
-
         if (!answer) {
-
             throw new Error(
                 "NEXA returned an empty response."
             );
         }
 
-
-        /* -------------------------------------------
-           SHOW AI RESPONSE
-           ------------------------------------------- */
-
-        addAssistantMessage(
-            answer
-        );
-
-
-        /* -------------------------------------------
-           UPDATE USER
-           ------------------------------------------- */
+        addAssistantMessage(answer);
 
         if (result.user) {
-
-            state.user =
-                result.user;
-
+            state.user = result.user;
             updateUserUI();
-
         } else {
-
             await refreshCurrentUser();
         }
 
-
     } catch (error) {
-
         if (typing) {
             typing.remove();
         }
 
-
-        /* Restore message */
-
-        input.value =
-            message;
-
-
-        /* -------------------------------------------
-           FREE LIMIT
-           ------------------------------------------- */
+        input.value = message;
 
         if (
             error.code ===
             "FREE_LIMIT_REACHED"
         ) {
-
             addAssistantMessage(
                 "You have used your 1 free AI message.\n\n" +
                 "Upgrade to NEXA Pro for unlimited AI messages."
             );
 
-
             showToast(
                 "⚡ Free message used. Upgrade to NEXA Pro."
             );
 
-
             return;
         }
 
-
-        /* -------------------------------------------
-           SESSION EXPIRED
-           ------------------------------------------- */
-
-        if (
-            error.status ===
-            401
-        ) {
-
+        if (error.status === 401) {
             clearSession();
-
             showLogin();
-
 
             showToast(
                 "⚠️ Your session expired. Please login again."
             );
 
-
             return;
         }
-
-
-        /* -------------------------------------------
-           OTHER ERROR
-           ------------------------------------------- */
 
         addAssistantMessage(
             "⚠️ " +
@@ -1896,25 +1296,16 @@ async function sendMessage(event) {
             )
         );
 
-
     } finally {
-
-        state.sending =
-            false;
-
+        state.sending = false;
 
         if (sendButton) {
-            sendButton.disabled =
-                false;
+            sendButton.disabled = false;
         }
-
 
         input.focus();
 
-
         resizeChatInput();
-
-
         scrollChatToBottom();
     }
 }
@@ -1925,32 +1316,19 @@ async function sendMessage(event) {
    ========================================================= */
 
 function useSuggestion(text) {
-
-    const input =
-        getChatInput();
-
+    const input = getChatInput();
 
     if (!input) return;
 
-
-    input.value =
-        text;
-
+    input.value = text;
 
     resizeChatInput();
 
-
     input.focus();
 
-
-    /* Directly submit the form */
-
-    const form =
-        $("chatForm");
-
+    const form = $("chatForm");
 
     if (form) {
-
         form.requestSubmit();
     }
 }
@@ -1961,17 +1339,11 @@ function useSuggestion(text) {
    ========================================================= */
 
 function resizeChatInput() {
-
-    const input =
-        getChatInput();
-
+    const input = getChatInput();
 
     if (!input) return;
 
-
-    input.style.height =
-        "auto";
-
+    input.style.height = "auto";
 
     input.style.height =
         Math.min(
@@ -1986,11 +1358,8 @@ function resizeChatInput() {
    ========================================================= */
 
 async function logout() {
-
     try {
-
         if (state.token) {
-
             await api(
                 "/api/logout",
                 {
@@ -1998,24 +1367,18 @@ async function logout() {
                 }
             );
         }
-
     } catch {
-        /* Ignore logout server errors */
+        // Ignore logout server errors
     }
-
 
     clearSession();
 
-
     showLogin();
-
 
     const chat =
         $("chatMessages");
 
-
     if (chat) {
-
         chat.innerHTML = `
             <div class="welcome-message">
 
@@ -2036,25 +1399,19 @@ async function logout() {
                     <button
                         type="button"
                         onclick="useSuggestion('What can you do?')">
-
                         What can you do?
-
                     </button>
 
                     <button
                         type="button"
                         onclick="useSuggestion('Explain artificial intelligence simply.')">
-
                         Explain AI
-
                     </button>
 
                     <button
                         type="button"
                         onclick="useSuggestion('Give me some useful ideas.')">
-
                         Give me ideas
-
                     </button>
 
                 </div>
@@ -2062,7 +1419,6 @@ async function logout() {
             </div>
         `;
     }
-
 
     showToast(
         "👋 Logged out successfully."
@@ -2075,38 +1431,34 @@ async function logout() {
    ========================================================= */
 
 function setupChatKeyboard() {
+    const input = getChatInput();
 
-    const input =
-        getChatInput();
+    if (!input) {
+        console.warn(
+            "NEXA: Chat input not found during keyboard setup."
+        );
 
-
-    if (!input) return;
-
+        return;
+    }
 
     input.addEventListener(
         "input",
         resizeChatInput
     );
 
-
     input.addEventListener(
         "keydown",
         event => {
-
             if (
                 event.key === "Enter" &&
                 !event.shiftKey
             ) {
-
                 event.preventDefault();
-
 
                 const form =
                     $("chatForm");
 
-
                 if (form) {
-
                     form.requestSubmit();
                 }
             }
@@ -2120,7 +1472,6 @@ function setupChatKeyboard() {
    ========================================================= */
 
 function setupForms() {
-
     const loginForm =
         $("loginForm");
 
@@ -2130,32 +1481,21 @@ function setupForms() {
     const chatForm =
         $("chatForm");
 
-
     if (loginForm) {
-
         loginForm.addEventListener(
             "submit",
             login
         );
     }
 
-
     if (registerForm) {
-
         registerForm.addEventListener(
             "submit",
             register
         );
     }
 
-
     if (chatForm) {
-
-        /*
-           Remove any previously attached inline-style
-           behavior by using ONE submit listener.
-        */
-
         chatForm.addEventListener(
             "submit",
             sendMessage
@@ -2169,53 +1509,39 @@ function setupForms() {
    ========================================================= */
 
 async function initialize() {
-
     if (state.initialized) {
         return;
     }
 
+    state.initialized = true;
 
-    state.initialized =
-        true;
-
+    console.log(
+        "NEXA: Initializing..."
+    );
 
     setupForms();
-
     setupChatKeyboard();
 
-
     if (state.token) {
-
         setLoading(true);
 
-
         try {
-
             const user =
                 await refreshCurrentUser();
 
-
             if (user) {
-
                 showApp();
-
             } else {
-
                 clearSession();
-
                 showLogin();
             }
 
-
         } finally {
-
             setLoading(false);
         }
 
-
         return;
     }
-
 
     showLogin();
 }
@@ -2225,35 +1551,16 @@ async function initialize() {
    GLOBAL FUNCTIONS
    ========================================================= */
 
-window.showAuth =
-    showAuth;
-
-window.login =
-    login;
-
-window.register =
-    register;
-
-window.navigateTo =
-    navigateTo;
-
-window.toggleSidebar =
-    toggleSidebar;
-
-window.requestPro =
-    requestPro;
-
-window.cancelProRequest =
-    cancelProRequest;
-
-window.sendMessage =
-    sendMessage;
-
-window.useSuggestion =
-    useSuggestion;
-
-window.logout =
-    logout;
+window.showAuth = showAuth;
+window.login = login;
+window.register = register;
+window.navigateTo = navigateTo;
+window.toggleSidebar = toggleSidebar;
+window.requestPro = requestPro;
+window.cancelProRequest = cancelProRequest;
+window.sendMessage = sendMessage;
+window.useSuggestion = useSuggestion;
+window.logout = logout;
 
 
 /* =========================================================
@@ -2264,4 +1571,3 @@ document.addEventListener(
     "DOMContentLoaded",
     initialize
 );
-
