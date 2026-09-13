@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -14,7 +15,10 @@
 
 <body>
 
+    <!-- ========================= -->
     <!-- BACKGROUND -->
+    <!-- ========================= -->
+
     <div class="background">
         <div class="orb orb-1"></div>
         <div class="orb orb-2"></div>
@@ -31,58 +35,83 @@
         <div class="auth-card">
 
             <div class="logo-big">
-                <div class="logo-symbol">N</div>
+
+                <div class="logo-symbol">
+                    N
+                </div>
 
                 <div>
                     <h1>NEXA</h1>
                     <span>AI COMMAND CENTER</span>
                 </div>
+
             </div>
 
+
+            <!-- AUTH TABS -->
 
             <div class="auth-tabs">
 
                 <button
                     id="loginTab"
                     class="auth-tab active"
+                    type="button"
                     onclick="showAuth('login')">
+
                     Login
+
                 </button>
 
                 <button
                     id="registerTab"
                     class="auth-tab"
+                    type="button"
                     onclick="showAuth('register')">
+
                     Create Account
+
                 </button>
 
             </div>
 
 
+            <!-- ========================= -->
             <!-- LOGIN -->
+            <!-- ========================= -->
 
-            <form id="loginForm" class="auth-form">
+            <form
+                id="loginForm"
+                class="auth-form">
 
-                <h2>Welcome back</h2>
+                <h2>
+                    Welcome back
+                </h2>
 
                 <p class="auth-description">
                     Sign in to continue to NEXA AI.
                 </p>
 
-                <label>Username</label>
+
+                <label for="loginUsername">
+                    Username
+                </label>
 
                 <input
                     id="loginUsername"
+                    name="username"
                     type="text"
                     placeholder="Enter username"
                     autocomplete="username"
                     required>
 
 
-                <label>Password</label>
+                <label for="loginPassword">
+                    Password
+                </label>
 
                 <input
                     id="loginPassword"
+                    name="password"
                     type="password"
                     placeholder="Enter password"
                     autocomplete="current-password"
@@ -93,49 +122,65 @@
                     class="primary-btn"
                     type="submit">
 
-                    <span>LOGIN TO NEXA</span>
+                    <span>
+                        LOGIN TO NEXA
+                    </span>
 
                 </button>
 
             </form>
 
 
+            <!-- ========================= -->
             <!-- REGISTER -->
+            <!-- ========================= -->
 
             <form
                 id="registerForm"
                 class="auth-form hidden">
 
-                <h2>Create your account</h2>
+                <h2>
+                    Create your account
+                </h2>
 
                 <p class="auth-description">
                     Start using NEXA AI for free.
                 </p>
 
-                <label>Username</label>
+
+                <label for="registerUsername">
+                    Username
+                </label>
 
                 <input
                     id="registerUsername"
+                    name="username"
                     type="text"
                     placeholder="Choose a username"
                     autocomplete="username"
                     required>
 
 
-                <label>Password</label>
+                <label for="registerPassword">
+                    Password
+                </label>
 
                 <input
                     id="registerPassword"
+                    name="password"
                     type="password"
                     placeholder="Create a password"
                     autocomplete="new-password"
                     required>
 
 
-                <label>Confirm Password</label>
+                <label for="registerConfirm">
+                    Confirm Password
+                </label>
 
                 <input
                     id="registerConfirm"
+                    name="confirmPassword"
                     type="password"
                     placeholder="Confirm password"
                     autocomplete="new-password"
@@ -146,20 +191,30 @@
                     class="primary-btn"
                     type="submit">
 
-                    <span>CREATE ACCOUNT</span>
+                    <span>
+                        CREATE ACCOUNT
+                    </span>
 
                 </button>
 
             </form>
 
 
+            <!-- AUTH FOOTER -->
+
             <div class="auth-footer">
 
-                <span>FREE PLAN</span>
+                <span>
+                    FREE PLAN
+                </span>
 
-                <span>•</span>
+                <span>
+                    •
+                </span>
 
-                <span>UPGRADE TO PRO ANYTIME</span>
+                <span>
+                    UPGRADE TO PRO ANYTIME
+                </span>
 
             </div>
 
@@ -177,7 +232,9 @@
         class="app-screen hidden">
 
 
+        <!-- ========================= -->
         <!-- SIDEBAR -->
+        <!-- ========================= -->
 
         <aside
             id="sidebar"
@@ -209,6 +266,7 @@
 
                 <button
                     class="mobile-close"
+                    type="button"
                     onclick="toggleSidebar()">
 
                     ×
@@ -241,12 +299,15 @@
             </div>
 
 
+            <!-- ========================= -->
             <!-- NAVIGATION -->
+            <!-- ========================= -->
 
             <nav class="navigation">
 
                 <button
                     class="nav-btn active"
+                    type="button"
                     data-page="chatPage"
                     onclick="navigateTo('chatPage')">
 
@@ -263,6 +324,7 @@
 
                 <button
                     class="nav-btn"
+                    type="button"
                     data-page="proPage"
                     onclick="navigateTo('proPage')">
 
@@ -279,6 +341,7 @@
 
                 <button
                     class="nav-btn"
+                    type="button"
                     data-page="accountPage"
                     onclick="navigateTo('accountPage')">
 
@@ -295,7 +358,9 @@
             </nav>
 
 
+            <!-- ========================= -->
             <!-- SIDEBAR BOTTOM -->
+            <!-- ========================= -->
 
             <div class="sidebar-bottom">
 
@@ -312,6 +377,7 @@
 
                 <button
                     class="logout-btn"
+                    type="button"
                     onclick="logout()">
 
                     Logout
@@ -336,6 +402,7 @@
 
                 <button
                     class="menu-btn"
+                    type="button"
                     onclick="toggleSidebar()">
 
                     ☰
@@ -364,6 +431,8 @@
                 class="page active-page">
 
 
+                <!-- PAGE HEADER -->
+
                 <div class="page-header">
 
                     <div>
@@ -390,12 +459,16 @@
                 </div>
 
 
+                <!-- ========================= -->
                 <!-- CHAT -->
+                <!-- ========================= -->
 
                 <div
                     id="chatMessages"
                     class="chat-messages">
 
+
+                    <!-- WELCOME -->
 
                     <div class="welcome-message">
 
@@ -417,6 +490,7 @@
                         <div class="suggestions">
 
                             <button
+                                type="button"
                                 onclick="useSuggestion('What can you do?')">
 
                                 What can you do?
@@ -425,6 +499,7 @@
 
 
                             <button
+                                type="button"
                                 onclick="useSuggestion('Explain artificial intelligence simply.')">
 
                                 Explain AI
@@ -433,6 +508,7 @@
 
 
                             <button
+                                type="button"
                                 onclick="useSuggestion('Give me some useful ideas.')">
 
                                 Give me ideas
@@ -446,26 +522,32 @@
                 </div>
 
 
+                <!-- ========================= -->
                 <!-- CHAT INPUT -->
+                <!-- ========================= -->
 
                 <div class="chat-input-area">
 
                     <form
                         id="chatForm"
-                        class="chat-form">
+                        class="chat-form"
+                        autocomplete="off">
 
 
                         <textarea
                             id="chatInput"
+                            name="chatInput"
                             rows="1"
                             placeholder="Ask NEXA anything..."
-                            autocomplete="off"></textarea>
+                            autocomplete="off"
+                            spellcheck="true"></textarea>
 
 
                         <button
                             id="sendButton"
                             class="send-btn"
-                            type="submit">
+                            type="submit"
+                            aria-label="Send message">
 
                             <span>
                                 ➤
@@ -554,12 +636,16 @@
                         </div>
 
 
+                        <!-- FEATURES -->
+
                         <div class="pro-features">
 
 
                             <div class="feature">
 
-                                <span>✓</span>
+                                <span>
+                                    ✓
+                                </span>
 
                                 <div>
 
@@ -578,7 +664,9 @@
 
                             <div class="feature">
 
-                                <span>✓</span>
+                                <span>
+                                    ✓
+                                </span>
 
                                 <div>
 
@@ -597,7 +685,9 @@
 
                             <div class="feature">
 
-                                <span>✓</span>
+                                <span>
+                                    ✓
+                                </span>
 
                                 <div>
 
@@ -616,7 +706,9 @@
 
                             <div class="feature">
 
-                                <span>✓</span>
+                                <span>
+                                    ✓
+                                </span>
 
                                 <div>
 
@@ -635,6 +727,8 @@
                         </div>
 
 
+                        <!-- PRO ACTION -->
+
                         <div
                             id="proAction"
                             class="pro-action">
@@ -642,6 +736,7 @@
 
                             <button
                                 class="pro-btn"
+                                type="button"
                                 onclick="requestPro()">
 
                                 REQUEST PRO ACCESS — ₹99
@@ -750,7 +845,9 @@
     </section>
 
 
+    <!-- ========================= -->
     <!-- TOAST -->
+    <!-- ========================= -->
 
     <div
         id="toast"
@@ -758,7 +855,9 @@
     </div>
 
 
+    <!-- ========================= -->
     <!-- LOADING -->
+    <!-- ========================= -->
 
     <div
         id="loadingOverlay"
@@ -773,7 +872,13 @@
     </div>
 
 
-    <script src="app.js"></script>
+    <!-- ========================= -->
+    <!-- JAVASCRIPT -->
+    <!-- CACHE BUSTER -->
+    <!-- ========================= -->
+
+    <script src="app.js?v=2"></script>
 
 </body>
 </html>
+
