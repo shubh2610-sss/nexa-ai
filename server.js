@@ -1,1873 +1,950 @@
+require("dotenv").config();
+
 const express = require("express");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
-const dotenv = require("dotenv");
-
-/* =========================================================
-   NEXA AI SERVER
-   FREE = 1 AI MESSAGE
-   PRO  = UNLIMITED AI MESSAGES
-   ========================================================= */
-
-const ENV_PATH = path.join(__dirname, ".env");
-
-const envResult = dotenv.config({
-    path: ENV_PATH,
-    override: true
-});
-
-const PORT = Number(process.env.PORT) || 3000;
-
-const ADMIN_PASSWORD = String(
-    process.env.ADMIN_PASSWORD || ""
-).trim();
-
-const GEMINI_API_KEY = String(
-    process.env.GEMINI_API_KEY || ""
-).trim();
-
-console.log("");
-console.log("==============================================");
-console.log("              NEXA ENVIRONMENT");
-console.log("==============================================");
-
-console.log(
-    ".env loaded:",
-    !envResult.error
-);
-
-console.log(
-    "Admin password configured:",
-    ADMIN_PASSWORD.length > 0
-);
-
-console.log(
-    "Admin password length:",
-    ADMIN_PASSWORD.length
-);
-
-console.log(
-    "Gemini API configured:",
-    GEMINI_API_KEY.length > 0
-);
-
-console.log("==============================================");
-console.log("");
 
 const app = express();
 
 /* =========================================================
-   MIDDLEWARE
-   ========================================================= */
+   NEXA ENVIRONMENT
+========================================================= */
 
-app.use(
-    express.json({
-        limit: "2mb"
-    })
-);
+const PORT = Number(process.env.PORT) || 3000;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 
-/* =========================================================
-   DIRECTORIES
-   ========================================================= */
+const ROOT_DIR = __dirname;
+const PUBLIC_DIR = path.join(ROOT_DIR, "public");
+const DATA_DIR = path.join(ROOT_DIR, "data");
+const USERS_FILE = path.join(DATA_DIR, "users.json");
 
-const DATA_DIR = path.join(
-    __dirname,
-    "data"
-);
+console.log(`
+==============================================
+              NEXA ENVIRONMENT
+==============================================
 
-const DB_FILE = path.join(
-    DATA_DIR,
-    "users.json"
-);
+.env loaded: ${Boolean(process.env.ADMIN_PASSWORD || process.env.GEMINI_API_KEY)}
+Admin password configured: ${Boolean(ADMIN_PASSWORD)}
+Admin password length: ${ADMIN_PASSWORD.length}
+Gemini API configured: ${Boolean(GEMINI_API_KEY)}
 
-const PUBLIC_DIR = path.join(
-    __dirname,
-    "public"
-);
-
-const ADMIN_DIR = path.join(
-    PUBLIC_DIR,
-    "admin"
-);
+==============================================
+`);
 
 /* =========================================================
-   DATABASE SETUP
-   ========================================================= */
+   DATA SETUP
+========================================================= */
 
 if (!fs.existsSync(DATA_DIR)) {
-
-    fs.mkdirSync(
-        DATA_DIR,
-        {
-            recursive: true
-        }
-    );
+    fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-if (!fs.existsSync(DB_FILE)) {
-
-    fs.writeFileSync(
-        DB_FILE,
-        JSON.stringify(
-            {
-                users: []
-            },
-            null,
-            2
-        ),
-        "utf8"
-    );
+if (!fs.existsSync(USERS_FILE)) {
+    fs.writeFileSync(USERS_FILE, "[]", "utf8");
 }
 
 /* =========================================================
-   DATABASE FUNCTIONS
-   ========================================================= */
+   APP SETUP
+========================================================= */
 
-function readDatabase() {
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true }));
 
+/* =========================================================
+   IN-MEMORY SESSIONS
+========================================================= */
+
+const sessions = new Map();
+const adminSessions = new Map();
+
+/* =========================================================
+   USER DATABASE HELPERS
+========================================================= */
+
+function readUsers() {
     try {
+        const raw = fs.readFileSync(USERS_FILE, "utf8");
 
-        const raw =
-            fs.readFileSync(
-                DB_FILE,
-                "utf8"
-            );
-
-        const data =
-            JSON.parse(raw);
-
-        if (
-            !data ||
-            !Array.isArray(data.users)
-        ) {
-
-            return {
-                users: []
-            };
+        if (!raw.trim()) {
+            return [];
         }
 
-        /*
-         * Automatically add aiMessagesUsed
-         * to older users created before
-         * the Free-message system.
-         */
+        const users = JSON.parse(raw);
 
-        data.users.forEach(
-            user => {
+        if (!Array.isArray(users)) {
+            return [];
+        }
 
-                if (
-                    typeof user.aiMessagesUsed !==
-                    "number"
-                ) {
-
-                    user.aiMessagesUsed = 0;
-                }
-            }
-        );
-
-        return data;
-
+        return users;
     } catch (error) {
-
-        console.error(
-            "Database read error:",
-            error.message
-        );
-
-        return {
-            users: []
-        };
+        console.error("Could not read users.json:", error.message);
+        return [];
     }
 }
 
-function writeDatabase(data) {
-
+function writeUsers(users) {
     try {
-
         fs.writeFileSync(
-            DB_FILE,
-            JSON.stringify(
-                data,
-                null,
-                2
-            ),
+            USERS_FILE,
+            JSON.stringify(users, null, 2),
             "utf8"
         );
 
+        return true;
     } catch (error) {
-
-        console.error(
-            "Database write error:",
-            error.message
-        );
-
-        throw error;
+        console.error("Could not write users.json:", error.message);
+        return false;
     }
 }
 
 /* =========================================================
-   SESSIONS
-   ========================================================= */
-
-const sessions = new Map();
-
-const adminSessions = new Set();
-
-/* =========================================================
-   TOKEN
-   ========================================================= */
+   GENERAL HELPERS
+========================================================= */
 
 function createToken() {
-
-    return crypto
-        .randomBytes(32)
-        .toString("hex");
+    return crypto.randomBytes(32).toString("hex");
 }
 
-/* =========================================================
-   PUBLIC USER
-   ========================================================= */
+function normalizeUsername(username) {
+    return String(username || "").trim().toLowerCase();
+}
 
 function publicUser(user) {
-
-    const used =
-        Number(
-            user.aiMessagesUsed || 0
-        );
+    const used = Number(user.aiMessagesUsed || 0);
 
     return {
-
-        id:
-            user.id,
-
-        username:
-            user.username,
-
-        plan:
-            user.plan,
-
-        proRequest:
-            user.proRequest,
-
-        createdAt:
-            user.createdAt,
-
-        aiMessagesUsed:
-            used,
+        id: user.id,
+        username: user.username,
+        plan: user.plan || "free",
+        proRequest: user.proRequest || "none",
+        createdAt: user.createdAt,
+        aiMessagesUsed: used,
 
         aiMessagesRemaining:
             user.plan === "pro"
                 ? null
-                : Math.max(
-                    0,
-                    1 - used
-                )
+                : Math.max(0, 1 - used)
     };
 }
 
-/* =========================================================
-   GET USER FROM REQUEST
-   ========================================================= */
+function findUserById(id) {
+    const users = readUsers();
+    return users.find(user => user.id === id);
+}
 
-function getUserFromRequest(req) {
+function saveUser(updatedUser) {
+    const users = readUsers();
 
-    const authorization =
-        req.headers.authorization || "";
+    const index = users.findIndex(
+        user => user.id === updatedUser.id
+    );
 
-    if (
-        !authorization.startsWith(
-            "Bearer "
-        )
-    ) {
-
-        return null;
+    if (index === -1) {
+        return false;
     }
 
-    const token =
-        authorization.substring(7);
+    users[index] = updatedUser;
 
-    const userId =
-        sessions.get(token);
+    return writeUsers(users);
+}
+
+/* =========================================================
+   AUTH MIDDLEWARE
+========================================================= */
+
+function requireUser(req, res, next) {
+    const auth = req.headers.authorization || "";
+
+    if (!auth.startsWith("Bearer ")) {
+        return res.status(401).json({
+            error: "Authentication required."
+        });
+    }
+
+    const token = auth.slice(7);
+    const userId = sessions.get(token);
 
     if (!userId) {
-
-        return null;
+        return res.status(401).json({
+            error: "Session expired. Please login again."
+        });
     }
 
-    const db =
-        readDatabase();
-
-    return (
-        db.users.find(
-            user =>
-                user.id === userId
-        ) || null
-    );
-}
-
-/* =========================================================
-   REQUIRE USER
-   ========================================================= */
-
-function requireUser(
-    req,
-    res,
-    next
-) {
-
-    const user =
-        getUserFromRequest(req);
+    const user = findUserById(userId);
 
     if (!user) {
+        sessions.delete(token);
 
         return res.status(401).json({
-
-            error:
-                "Unauthorized. Please login."
+            error: "User account not found."
         });
     }
 
-    req.user =
-        user;
+    req.user = user;
+    req.token = token;
+
+    next();
+}
+
+function requireAdmin(req, res, next) {
+    const auth = req.headers.authorization || "";
+
+    if (!auth.startsWith("Bearer ")) {
+        return res.status(401).json({
+            error: "Admin authentication required."
+        });
+    }
+
+    const token = auth.slice(7);
+
+    if (!adminSessions.has(token)) {
+        return res.status(401).json({
+            error: "Admin session expired."
+        });
+    }
+
+    req.adminToken = token;
 
     next();
 }
 
 /* =========================================================
-   REQUIRE ADMIN
-   ========================================================= */
+   HEALTH CHECK
+========================================================= */
 
-function requireAdmin(
-    req,
-    res,
-    next
-) {
-
-    const authorization =
-        req.headers.authorization || "";
-
-    if (
-        !authorization.startsWith(
-            "Bearer "
-        )
-    ) {
-
-        return res.status(401).json({
-
-            error:
-                "Developer authentication required."
-        });
-    }
-
-    const token =
-        authorization.substring(7);
-
-    if (
-        !adminSessions.has(token)
-    ) {
-
-        return res.status(401).json({
-
-            error:
-                "Invalid developer session."
-        });
-    }
-
-    next();
-}
-
-/* =========================================================
-   HEALTH
-   ========================================================= */
-
-app.get(
-    "/api/health",
-    (req, res) => {
-
-        res.json({
-
-            status:
-                "online",
-
-            name:
-                "NEXA AI",
-
-            port:
-                PORT,
-
-            adminConfigured:
-                ADMIN_PASSWORD.length > 0,
-
-            geminiConfigured:
-                GEMINI_API_KEY.length > 0,
-
-            freeMessages:
-                1,
-
-            proMessages:
-                "unlimited",
-
-            time:
-                new Date().toISOString()
-        });
-    }
-);
+app.get("/api/health", (req, res) => {
+    res.json({
+        ok: true,
+        service: "NEXA AI",
+        status: "online",
+        timestamp: new Date().toISOString()
+    });
+});
 
 /* =========================================================
    REGISTER
-   ========================================================= */
+========================================================= */
 
-app.post(
-    "/api/register",
-    async (req, res) => {
+app.post("/api/register", async (req, res) => {
+    try {
+        const username = normalizeUsername(req.body.username);
+        const password = String(req.body.password || "");
 
-        try {
-
-            const username =
-                String(
-                    req.body?.username || ""
-                ).trim();
-
-            const password =
-                String(
-                    req.body?.password || ""
-                );
-
-            if (
-                username.length < 3
-            ) {
-
-                return res.status(400).json({
-
-                    error:
-                        "Username must be at least 3 characters."
-                });
-            }
-
-            if (
-                username.length > 30
-            ) {
-
-                return res.status(400).json({
-
-                    error:
-                        "Username must be less than 30 characters."
-                });
-            }
-
-            if (
-                password.length < 6
-            ) {
-
-                return res.status(400).json({
-
-                    error:
-                        "Password must be at least 6 characters."
-                });
-            }
-
-            const db =
-                readDatabase();
-
-            const exists =
-                db.users.some(
-                    user =>
-                        String(
-                            user.username
-                        ).toLowerCase() ===
-                        username.toLowerCase()
-                );
-
-            if (exists) {
-
-                return res.status(409).json({
-
-                    error:
-                        "Username already exists."
-                });
-            }
-
-            const passwordHash =
-                await bcrypt.hash(
-                    password,
-                    10
-                );
-
-            const user = {
-
-                id:
-                    crypto.randomUUID(),
-
-                username,
-
-                passwordHash,
-
-                plan:
-                    "free",
-
-                proRequest:
-                    "none",
-
-                aiMessagesUsed:
-                    0,
-
-                createdAt:
-                    new Date().toISOString()
-            };
-
-            db.users.push(user);
-
-            writeDatabase(db);
-
-            const token =
-                createToken();
-
-            sessions.set(
-                token,
-                user.id
-            );
-
-            console.log(
-                "New user registered:",
-                username
-            );
-
-            res.json({
-
-                message:
-                    "Account created successfully.",
-
-                token,
-
-                user:
-                    publicUser(user)
-            });
-
-        } catch (error) {
-
-            console.error(
-                "Register error:",
-                error
-            );
-
-            res.status(500).json({
-
-                error:
-                    "Server error while creating account."
+        if (!username || !password) {
+            return res.status(400).json({
+                error: "Username and password are required."
             });
         }
+
+        if (username.length < 3) {
+            return res.status(400).json({
+                error: "Username must be at least 3 characters."
+            });
+        }
+
+        if (password.length < 6) {
+            return res.status(400).json({
+                error: "Password must be at least 6 characters."
+            });
+        }
+
+        const users = readUsers();
+
+        const existingUser = users.find(
+            user => normalizeUsername(user.username) === username
+        );
+
+        if (existingUser) {
+            return res.status(409).json({
+                error: "Username already exists."
+            });
+        }
+
+        const passwordHash = await bcrypt.hash(password, 10);
+
+        const user = {
+            id: crypto.randomUUID(),
+            username,
+            passwordHash,
+            plan: "free",
+            proRequest: "none",
+            aiMessagesUsed: 0,
+            createdAt: new Date().toISOString()
+        };
+
+        users.push(user);
+
+        if (!writeUsers(users)) {
+            return res.status(500).json({
+                error: "Could not create account."
+            });
+        }
+
+        const token = createToken();
+        sessions.set(token, user.id);
+
+        return res.status(201).json({
+            message: "Account created successfully.",
+            token,
+            user: publicUser(user)
+        });
+
+    } catch (error) {
+        console.error("Register error:", error);
+
+        return res.status(500).json({
+            error: "Registration failed."
+        });
     }
-);
+});
 
 /* =========================================================
    LOGIN
-   ========================================================= */
+========================================================= */
 
-app.post(
-    "/api/login",
-    async (req, res) => {
+app.post("/api/login", async (req, res) => {
+    try {
+        const username = normalizeUsername(req.body.username);
+        const password = String(req.body.password || "");
 
-        try {
-
-            const username =
-                String(
-                    req.body?.username || ""
-                ).trim();
-
-            const password =
-                String(
-                    req.body?.password || ""
-                );
-
-            const db =
-                readDatabase();
-
-            const user =
-                db.users.find(
-                    item =>
-                        String(
-                            item.username
-                        ).toLowerCase() ===
-                        username.toLowerCase()
-                );
-
-            if (!user) {
-
-                return res.status(401).json({
-
-                    error:
-                        "Invalid username or password."
-                });
-            }
-
-            const valid =
-                await bcrypt.compare(
-                    password,
-                    user.passwordHash
-                );
-
-            if (!valid) {
-
-                return res.status(401).json({
-
-                    error:
-                        "Invalid username or password."
-                });
-            }
-
-            const token =
-                createToken();
-
-            sessions.set(
-                token,
-                user.id
-            );
-
-            console.log(
-                "User login:",
-                username
-            );
-
-            res.json({
-
-                message:
-                    "Login successful.",
-
-                token,
-
-                user:
-                    publicUser(user)
-            });
-
-        } catch (error) {
-
-            console.error(
-                "Login error:",
-                error
-            );
-
-            res.status(500).json({
-
-                error:
-                    "Server error while logging in."
+        if (!username || !password) {
+            return res.status(400).json({
+                error: "Username and password are required."
             });
         }
+
+        const users = readUsers();
+
+        const user = users.find(
+            item => normalizeUsername(item.username) === username
+        );
+
+        if (!user) {
+            return res.status(401).json({
+                error: "Invalid username or password."
+            });
+        }
+
+        const validPassword = await bcrypt.compare(
+            password,
+            user.passwordHash
+        );
+
+        if (!validPassword) {
+            return res.status(401).json({
+                error: "Invalid username or password."
+            });
+        }
+
+        const token = createToken();
+
+        sessions.set(token, user.id);
+
+        return res.json({
+            message: "Login successful.",
+            token,
+            user: publicUser(user)
+        });
+
+    } catch (error) {
+        console.error("Login error:", error);
+
+        return res.status(500).json({
+            error: "Login failed."
+        });
     }
-);
+});
 
 /* =========================================================
    CURRENT USER
-   ========================================================= */
+========================================================= */
 
-app.get(
-    "/api/me",
-    requireUser,
-    (req, res) => {
-
-        res.json({
-
-            user:
-                publicUser(
-                    req.user
-                )
-        });
-    }
-);
+app.get("/api/me", requireUser, (req, res) => {
+    res.json({
+        user: publicUser(req.user)
+    });
+});
 
 /* =========================================================
-   REQUEST PRO
-   ========================================================= */
+   PRO REQUEST
+========================================================= */
 
-app.post(
-    "/api/pro/request",
-    requireUser,
-    (req, res) => {
+app.post("/api/pro/request", requireUser, (req, res) => {
+    const user = req.user;
 
-        const db =
-            readDatabase();
-
-        const user =
-            db.users.find(
-                item =>
-                    item.id ===
-                    req.user.id
-            );
-
-        if (!user) {
-
-            return res.status(404).json({
-
-                error:
-                    "User not found."
-            });
-        }
-
-        if (
-            user.plan ===
-            "pro"
-        ) {
-
-            return res.status(400).json({
-
-                error:
-                    "You already have Pro access."
-            });
-        }
-
-        if (
-            user.proRequest ===
-            "pending"
-        ) {
-
-            return res.status(400).json({
-
-                error:
-                    "Your Pro request is already pending."
-            });
-        }
-
-        user.proRequest =
-            "pending";
-
-        user.proRequestedAt =
-            new Date().toISOString();
-
-        writeDatabase(db);
-
-        console.log(
-            "Pro request:",
-            user.username
-        );
-
-        res.json({
-
-            message:
-                "Pro request sent to developer.",
-
-            user:
-                publicUser(user)
+    if (user.plan === "pro") {
+        return res.status(400).json({
+            error: "You already have NEXA Pro.",
+            user: publicUser(user)
         });
     }
-);
+
+    if (user.proRequest === "pending") {
+        return res.status(400).json({
+            error: "Your Pro request is already pending.",
+            user: publicUser(user)
+        });
+    }
+
+    user.proRequest = "pending";
+
+    if (!saveUser(user)) {
+        return res.status(500).json({
+            error: "Could not submit Pro request."
+        });
+    }
+
+    res.json({
+        message: "Pro request submitted successfully.",
+        user: publicUser(user)
+    });
+});
 
 /* =========================================================
    CANCEL PRO REQUEST
-   ========================================================= */
+========================================================= */
 
-app.post(
-    "/api/pro/cancel",
-    requireUser,
-    (req, res) => {
+app.post("/api/pro/cancel", requireUser, (req, res) => {
+    const user = req.user;
 
-        const db =
-            readDatabase();
-
-        const user =
-            db.users.find(
-                item =>
-                    item.id ===
-                    req.user.id
-            );
-
-        if (!user) {
-
-            return res.status(404).json({
-
-                error:
-                    "User not found."
-            });
-        }
-
-        if (
-            user.proRequest !==
-            "pending"
-        ) {
-
-            return res.status(400).json({
-
-                error:
-                    "There is no pending Pro request."
-            });
-        }
-
-        user.proRequest =
-            "none";
-
-        delete user.proRequestedAt;
-
-        writeDatabase(db);
-
-        res.json({
-
-            message:
-                "Pro request cancelled.",
-
-            user:
-                publicUser(user)
+    if (user.proRequest !== "pending") {
+        return res.status(400).json({
+            error: "There is no pending Pro request."
         });
     }
-);
+
+    user.proRequest = "none";
+
+    if (!saveUser(user)) {
+        return res.status(500).json({
+            error: "Could not cancel Pro request."
+        });
+    }
+
+    res.json({
+        message: "Pro request cancelled.",
+        user: publicUser(user)
+    });
+});
 
 /* =========================================================
    ADMIN LOGIN
-   ========================================================= */
+========================================================= */
 
-app.post(
-    "/api/admin/login",
-    (req, res) => {
+app.post("/api/admin/login", (req, res) => {
+    const password = String(req.body.password || "");
 
-        const password =
-            String(
-                req.body?.password || ""
-            ).trim();
-
-        console.log("");
-        console.log(
-            "ADMIN LOGIN ATTEMPT"
-        );
-
-        console.log(
-            "Received password length:",
-            password.length
-        );
-
-        console.log(
-            "Configured password length:",
-            ADMIN_PASSWORD.length
-        );
-
-        if (
-            !ADMIN_PASSWORD
-        ) {
-
-            console.error(
-                "ADMIN PASSWORD IS NOT CONFIGURED!"
-            );
-
-            return res.status(500).json({
-
-                error:
-                    "Admin password is not configured on the server."
-            });
-        }
-
-        if (
-            password !==
-            ADMIN_PASSWORD
-        ) {
-
-            console.log(
-                "Admin login FAILED."
-            );
-
-            return res.status(401).json({
-
-                error:
-                    "Incorrect developer password."
-            });
-        }
-
-        const token =
-            createToken();
-
-        adminSessions.add(
-            token
-        );
-
-        console.log(
-            "Admin login SUCCESSFUL."
-        );
-
-        res.json({
-
-            message:
-                "Developer login successful.",
-
-            token
+    if (!ADMIN_PASSWORD) {
+        return res.status(500).json({
+            error: "Admin password is not configured."
         });
     }
-);
+
+    if (password !== ADMIN_PASSWORD) {
+        return res.status(401).json({
+            error: "Invalid developer password."
+        });
+    }
+
+    const token = createToken();
+
+    adminSessions.set(token, {
+        createdAt: Date.now()
+    });
+
+    res.json({
+        message: "Developer login successful.",
+        token
+    });
+});
 
 /* =========================================================
    ADMIN USERS
-   ========================================================= */
+========================================================= */
 
-app.get(
-    "/api/admin/users",
-    requireAdmin,
-    (req, res) => {
+app.get("/api/admin/users", requireAdmin, (req, res) => {
+    const users = readUsers();
 
-        const db =
-            readDatabase();
-
-        res.json({
-
-            users:
-                db.users.map(
-                    publicUser
-                )
-        });
-    }
-);
+    res.json({
+        users: users.map(publicUser)
+    });
+});
 
 /* =========================================================
    ADMIN APPROVE PRO
-   ========================================================= */
+========================================================= */
 
 app.post(
     "/api/admin/pro/:userId/approve",
     requireAdmin,
     (req, res) => {
-
-        const db =
-            readDatabase();
-
-        const user =
-            db.users.find(
-                item =>
-                    item.id ===
-                    req.params.userId
-            );
+        const user = findUserById(req.params.userId);
 
         if (!user) {
-
             return res.status(404).json({
-
-                error:
-                    "User not found."
+                error: "User not found."
             });
         }
 
-        user.plan =
-            "pro";
+        user.plan = "pro";
+        user.proRequest = "none";
 
-        user.proRequest =
-            "approved";
-
-        user.proApprovedAt =
-            new Date().toISOString();
-
-        writeDatabase(db);
-
-        console.log(
-            "Pro approved:",
-            user.username
-        );
+        if (!saveUser(user)) {
+            return res.status(500).json({
+                error: "Could not approve Pro access."
+            });
+        }
 
         res.json({
-
-            message:
-                "Pro access approved.",
-
-            user:
-                publicUser(user)
+            message: `${user.username} is now a NEXA Pro user.`,
+            user: publicUser(user)
         });
     }
 );
 
 /* =========================================================
    ADMIN REJECT PRO
-   ========================================================= */
+========================================================= */
 
 app.post(
     "/api/admin/pro/:userId/reject",
     requireAdmin,
     (req, res) => {
-
-        const db =
-            readDatabase();
-
-        const user =
-            db.users.find(
-                item =>
-                    item.id ===
-                    req.params.userId
-            );
+        const user = findUserById(req.params.userId);
 
         if (!user) {
-
             return res.status(404).json({
-
-                error:
-                    "User not found."
+                error: "User not found."
             });
         }
 
-        user.proRequest =
-            "rejected";
+        user.proRequest = "rejected";
 
-        user.proRejectedAt =
-            new Date().toISOString();
-
-        writeDatabase(db);
-
-        console.log(
-            "Pro rejected:",
-            user.username
-        );
+        if (!saveUser(user)) {
+            return res.status(500).json({
+                error: "Could not reject Pro request."
+            });
+        }
 
         res.json({
-
-            message:
-                "Pro request rejected.",
-
-            user:
-                publicUser(user)
+            message: `${user.username}'s Pro request was rejected.`,
+            user: publicUser(user)
         });
     }
 );
 
 /* =========================================================
    ADMIN REVOKE PRO
-   ========================================================= */
+========================================================= */
 
 app.post(
     "/api/admin/pro/:userId/revoke",
     requireAdmin,
     (req, res) => {
-
-        const db =
-            readDatabase();
-
-        const user =
-            db.users.find(
-                item =>
-                    item.id ===
-                    req.params.userId
-            );
+        const user = findUserById(req.params.userId);
 
         if (!user) {
-
             return res.status(404).json({
-
-                error:
-                    "User not found."
+                error: "User not found."
             });
         }
 
-        user.plan =
-            "free";
-
-        user.proRequest =
-            "none";
-
-        user.proRevokedAt =
-            new Date().toISOString();
+        user.plan = "free";
+        user.proRequest = "none";
 
         /*
-         * IMPORTANT:
-         *
-         * We do NOT reset aiMessagesUsed.
-         *
-         * If someone used their free message
-         * before getting Pro, then after Pro
-         * is revoked they remain at 0 messages.
-         */
+          IMPORTANT:
+          aiMessagesUsed is NOT reset.
 
-        writeDatabase(db);
+          This preserves the rule:
+          FREE USERS GET 1 AI MESSAGE TOTAL.
+        */
 
-        console.log(
-            "Pro revoked:",
-            user.username
-        );
+        if (!saveUser(user)) {
+            return res.status(500).json({
+                error: "Could not revoke Pro access."
+            });
+        }
 
         res.json({
-
-            message:
-                "Pro access revoked.",
-
-            user:
-                publicUser(user)
+            message: `${user.username}'s Pro access was revoked.`,
+            user: publicUser(user)
         });
     }
 );
 
 /* =========================================================
-   REAL GEMINI AI
-   FREE = 1 MESSAGE
-   PRO = UNLIMITED
-   ========================================================= */
-
-app.post(
-    "/api/chat",
-    requireUser,
-    async (req, res) => {
-
-        try {
-
-            const message =
-                String(
-                    req.body?.message || ""
-                ).trim();
-
-            if (!message) {
-
-                return res.status(400).json({
-
-                    error:
-                        "Message cannot be empty."
-                });
-            }
-
-            /*
-             * ALWAYS READ FRESH DATABASE
-             * BEFORE CHECKING THE LIMIT.
-             */
-
-            let db =
-                readDatabase();
-
-            let user =
-                db.users.find(
-                    item =>
-                        item.id ===
-                        req.user.id
-                );
-
-            if (!user) {
-
-                return res.status(404).json({
-
-                    error:
-                        "User not found."
-                });
-            }
-
-            /*
-             * Make sure old accounts
-             * have the counter.
-             */
-
-            if (
-                typeof user.aiMessagesUsed !==
-                "number"
-            ) {
-
-                user.aiMessagesUsed =
-                    0;
-            }
-
-            /* =================================================
-               FREE USER LIMIT
-               ================================================= */
-
-            if (
-                user.plan !== "pro" &&
-                user.aiMessagesUsed >= 1
-            ) {
-
-                return res.status(403).json({
-
-                    code:
-                        "FREE_LIMIT_REACHED",
-
-                    error:
-                        "You have used your 1 free AI message.",
-
-                    message:
-                        "Upgrade to NEXA Pro for unlimited AI messages.",
-
-                    plan:
-                        "free",
-
-                    aiMessagesUsed:
-                        user.aiMessagesUsed,
-
-                    aiMessagesRemaining:
-                        0
-                });
-            }
-
-            /* =================================================
-               GEMINI KEY CHECK
-               ================================================= */
-
-            const apiKey =
-                String(
-                    process.env.GEMINI_API_KEY || ""
-                ).trim();
-
-            if (!apiKey) {
-
-                console.error(
-                    "GEMINI_API_KEY is missing."
-                );
-
-                return res.status(500).json({
-
-                    error:
-                        "Gemini API key is not configured on the server."
-                });
-            }
-
-            /* =================================================
-               NEXA SYSTEM INSTRUCTION
-               ================================================= */
-
-            const systemInstruction = `
-You are NEXA, a powerful general-purpose AI assistant.
-
-You are NOT an education-only assistant.
-
-You can help with:
-
-- General questions
-- Coding
-- Programming
-- Mathematics
-- Science
-- Technology
-- Writing
-- Ideas
-- Problem solving
-- Productivity
-- Research-style explanations
-- Everyday questions
-- Creative tasks
-
-Important behavior:
-
-1. Give useful and accurate answers.
-2. Be clear and natural.
-3. If the user asks for code, provide working code.
-4. If the user asks for a complete file, provide the complete file.
-5. If the user asks for step-by-step help, give numbered steps.
-6. Do not unnecessarily repeat the user's question.
-7. Do not reveal API keys.
-8. Do not reveal server secrets.
-9. You are NEXA AI.
-10. The current user is ${user.username}.
-11. Answer naturally like a modern AI assistant.
-12. If you do not know something, say so instead of inventing facts.
-`;
-
-            /* =================================================
-               GEMINI MODELS
-               ================================================= */
-
-            const models = [
-
-                "gemini-3.6-flash",
-
-                "gemini-3.5-flash",
-
-                "gemini-3.5-flash-lite",
-
-                "gemini-3.1-flash-lite",
-
-                "gemini-2.5-flash"
-
-            ];
-
-            let lastError =
-                null;
-
-            let finalResponse =
-                null;
-
-            let usedModel =
-                null;
-
-            /* =================================================
-               TRY GEMINI MODELS
-               ================================================= */
-
-            for (
-                const model of models
-            ) {
-
-                try {
-
-                    console.log(
-                        `NEXA → Gemini request: ${model}`
-                    );
-
-                    const response =
-                        await fetch(
-
-                            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-
-                            {
-
-                                method:
-                                    "POST",
-
-                                headers: {
-
-                                    "Content-Type":
-                                        "application/json",
-
-                                    "x-goog-api-key":
-                                        apiKey
-                                },
-
-                                body:
-                                    JSON.stringify({
-
-                                        system_instruction: {
-
-                                            parts: [
-
-                                                {
-                                                    text:
-                                                        systemInstruction
-                                                }
-
-                                            ]
-                                        },
-
-                                        contents: [
-
-                                            {
-
-                                                role:
-                                                    "user",
-
-                                                parts: [
-
-                                                    {
-                                                        text:
-                                                            message
-                                                    }
-
-                                                ]
-                                            }
-
-                                        ],
-
-                                        generationConfig: {
-
-                                            temperature:
-                                                0.7,
-
-                                            maxOutputTokens:
-                                                4096
-                                        }
-                                    })
-                            }
-                        );
-
-                    const data =
-                        await response.json();
-
-                    if (!response.ok) {
-
-                        const errorMessage =
-                            data?.error?.message ||
-                            `HTTP ${response.status}`;
-
-                        console.error(
-                            `${model} failed:`,
-                            errorMessage
-                        );
-
-                        lastError =
-                            errorMessage;
-
-                        continue;
-                    }
-
-                    finalResponse =
-                        data;
-
-                    usedModel =
-                        model;
-
-                    break;
-
-                } catch (error) {
-
-                    console.error(
-                        `${model} connection error:`,
-                        error.message
-                    );
-
-                    lastError =
-                        error.message;
-                }
-            }
-
-            /* =================================================
-               GEMINI FAILED
-               ================================================= */
-
-            if (!finalResponse) {
-
-                console.error(
-                    "All Gemini models failed."
-                );
-
-                /*
-                 * IMPORTANT:
-                 *
-                 * The Free message is NOT consumed
-                 * because Gemini did not successfully
-                 * answer.
-                 */
-
-                return res.status(502).json({
-
-                    error:
-                        "NEXA could not connect to Gemini.",
-
-                    details:
-                        lastError ||
-                        "All Gemini models failed."
-                });
-            }
-
-            /* =================================================
-               EXTRACT GEMINI TEXT
-               ================================================= */
-
-            const candidates =
-                finalResponse.candidates || [];
-
-            const firstCandidate =
-                candidates[0];
-
-            const parts =
-                firstCandidate
-                    ?.content
-                    ?.parts || [];
-
-            const reply =
-                parts
-                    .map(
-                        part =>
-                            part.text || ""
-                    )
+   GEMINI HELPERS
+========================================================= */
+
+const GEMINI_MODELS = [
+    "gemini-3.8-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-3.1-flash-lite",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-flash"
+];
+
+function extractGeminiText(data) {
+    if (!data) {
+        return "";
+    }
+
+    if (typeof data.text === "string") {
+        return data.text.trim();
+    }
+
+    if (Array.isArray(data.candidates)) {
+        for (const candidate of data.candidates) {
+            const parts = candidate?.content?.parts;
+
+            if (Array.isArray(parts)) {
+                const text = parts
+                    .map(part => part?.text || "")
                     .join("")
                     .trim();
 
-            if (!reply) {
-
-                console.error(
-                    "Gemini returned no text."
-                );
-
-                console.error(
-                    JSON.stringify(
-                        finalResponse,
-                        null,
-                        2
-                    )
-                );
-
-                /*
-                 * Again:
-                 * no Free message is consumed.
-                 */
-
-                return res.status(502).json({
-
-                    error:
-                        "Gemini returned an empty response."
-                });
+                if (text) {
+                    return text;
+                }
             }
-
-            /* =================================================
-               SUCCESSFUL RESPONSE
-               NOW CONSUME FREE MESSAGE
-               ================================================= */
-
-            if (
-                user.plan !== "pro"
-            ) {
-
-                user.aiMessagesUsed +=
-                    1;
-
-                writeDatabase(db);
-
-                console.log(
-                    `Free message used by ${user.username}: ${user.aiMessagesUsed}/1`
-                );
-            }
-
-            /* =================================================
-               RESPONSE
-               ================================================= */
-
-            console.log(
-                "NEXA response generated using:",
-                usedModel
-            );
-
-            const remaining =
-                user.plan === "pro"
-                    ? null
-                    : Math.max(
-                        0,
-                        1 -
-                        user.aiMessagesUsed
-                    );
-
-            res.json({
-
-                reply,
-
-                model:
-                    usedModel,
-
-                plan:
-                    user.plan,
-
-                aiMessagesUsed:
-                    user.aiMessagesUsed,
-
-                aiMessagesRemaining:
-                    remaining
-            });
-
-        } catch (error) {
-
-            console.error(
-                "NEXA AI ERROR:",
-                error
-            );
-
-            res.status(500).json({
-
-                error:
-                    "NEXA AI could not process your message."
-            });
         }
     }
-);
+
+    return "";
+}
+
+async function askGemini(prompt) {
+    if (!GEMINI_API_KEY) {
+        throw new Error("Gemini API key is not configured.");
+    }
+
+    let lastError = null;
+
+    for (const model of GEMINI_MODELS) {
+        try {
+            const url =
+                `https://generativelanguage.googleapis.com/v1beta/models/` +
+                `${model}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
+
+            const response = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    contents: [
+                        {
+                            role: "user",
+                            parts: [
+                                {
+                                    text: prompt
+                                }
+                            ]
+                        }
+                    ]
+                })
+            });
+
+            const rawText = await response.text();
+
+            let data = {};
+
+            try {
+                data = rawText ? JSON.parse(rawText) : {};
+            } catch {
+                data = {};
+            }
+
+            if (!response.ok) {
+                const errorMessage =
+                    data?.error?.message ||
+                    `Gemini request failed with status ${response.status}`;
+
+                lastError = new Error(
+                    `${model}: ${errorMessage}`
+                );
+
+                console.error(
+                    `Gemini model ${model} failed:`,
+                    errorMessage
+                );
+
+                continue;
+            }
+
+            const reply = extractGeminiText(data);
+
+            if (!reply) {
+                lastError = new Error(
+                    `${model}: Gemini returned an empty response.`
+                );
+
+                console.error(
+                    `Gemini model ${model} returned empty response.`
+                );
+
+                continue;
+            }
+
+            return {
+                reply,
+                model
+            };
+
+        } catch (error) {
+            lastError = error;
+
+            console.error(
+                `Gemini model ${model} error:`,
+                error.message
+            );
+        }
+    }
+
+    throw lastError || new Error("All Gemini models failed.");
+}
+
+/* =========================================================
+   CHAT
+========================================================= */
+
+app.post("/api/chat", requireUser, async (req, res) => {
+    const user = req.user;
+
+    const prompt = String(req.body.prompt || "").trim();
+
+    if (!prompt) {
+        return res.status(400).json({
+            error: "Please enter a message."
+        });
+    }
+
+    /*
+      FREE PLAN:
+      Exactly 1 successful AI message total.
+    */
+
+    if (
+        user.plan !== "pro" &&
+        Number(user.aiMessagesUsed || 0) >= 1
+    ) {
+        return res.status(403).json({
+            code: "FREE_LIMIT_REACHED",
+            error: "You have used your 1 free AI message.",
+            message:
+                "Upgrade to NEXA Pro for unlimited AI messages.",
+            plan: "free",
+            aiMessagesUsed: 1,
+            aiMessagesRemaining: 0
+        });
+    }
+
+    try {
+        const result = await askGemini(prompt);
+
+        /*
+          IMPORTANT:
+          Free message is consumed ONLY after
+          Gemini successfully returns a non-empty response.
+        */
+
+        if (user.plan !== "pro") {
+            user.aiMessagesUsed =
+                Number(user.aiMessagesUsed || 0) + 1;
+
+            saveUser(user);
+        }
+
+        const used = Number(user.aiMessagesUsed || 0);
+
+        res.json({
+            reply: result.reply,
+            model: result.model,
+            plan: user.plan,
+            aiMessagesUsed: used,
+
+            aiMessagesRemaining:
+                user.plan === "pro"
+                    ? null
+                    : Math.max(0, 1 - used)
+        });
+
+    } catch (error) {
+        console.error("Chat error:", error.message);
+
+        /*
+          DO NOT increment aiMessagesUsed here.
+          Failed AI requests don't consume the Free message.
+        */
+
+        res.status(502).json({
+            code: "AI_REQUEST_FAILED",
+            error: "NEXA could not get a response from the AI right now.",
+            details: error.message
+        });
+    }
+});
 
 /* =========================================================
    USER LOGOUT
-   ========================================================= */
+========================================================= */
 
-app.post(
-    "/api/logout",
-    (req, res) => {
+app.post("/api/logout", requireUser, (req, res) => {
+    sessions.delete(req.token);
 
-        const authorization =
-            req.headers.authorization ||
-            "";
-
-        if (
-            authorization.startsWith(
-                "Bearer "
-            )
-        ) {
-
-            sessions.delete(
-                authorization.substring(7)
-            );
-        }
-
-        res.json({
-
-            message:
-                "Logged out successfully."
-        });
-    }
-);
+    res.json({
+        message: "Logged out successfully."
+    });
+});
 
 /* =========================================================
    ADMIN LOGOUT
-   ========================================================= */
+========================================================= */
 
-app.post(
-    "/api/admin/logout",
-    (req, res) => {
+app.post("/api/admin/logout", requireAdmin, (req, res) => {
+    adminSessions.delete(req.adminToken);
 
-        const authorization =
-            req.headers.authorization ||
-            "";
-
-        if (
-            authorization.startsWith(
-                "Bearer "
-            )
-        ) {
-
-            adminSessions.delete(
-                authorization.substring(7)
-            );
-        }
-
-        res.json({
-
-            message:
-                "Developer logged out successfully."
-        });
-    }
-);
+    res.json({
+        message: "Developer logged out successfully."
+    });
+});
 
 /* =========================================================
-   ADMIN PAGE
-   ========================================================= */
+   ADMIN ROUTE
+========================================================= */
 
-app.get(
-    "/admin",
-    (req, res) => {
+app.get("/admin", (req, res) => {
+    res.sendFile(
+        path.join(PUBLIC_DIR, "admin", "index.html")
+    );
+});
 
-        res.sendFile(
-            path.join(
-                ADMIN_DIR,
-                "index.html"
-            )
-        );
-    }
-);
-
-app.get(
-    "/admin/",
-    (req, res) => {
-
-        res.sendFile(
-            path.join(
-                ADMIN_DIR,
-                "index.html"
-            )
-        );
-    }
-);
+app.get("/admin/", (req, res) => {
+    res.sendFile(
+        path.join(PUBLIC_DIR, "admin", "index.html")
+    );
+});
 
 /* =========================================================
    STATIC FILES
-   ========================================================= */
+========================================================= */
 
-app.use(
-    express.static(
-        PUBLIC_DIR
-    )
-);
+app.use(express.static(PUBLIC_DIR));
 
 /* =========================================================
    FRONTEND FALLBACK
-   ========================================================= */
+========================================================= */
 
-app.use(
-    (req, res, next) => {
-
-        if (
-            req.method === "GET" &&
-            !req.path.startsWith(
-                "/api/"
-            ) &&
-            !req.path.startsWith(
-                "/admin"
-            )
-        ) {
-
-            return res.sendFile(
-                path.join(
-                    PUBLIC_DIR,
-                    "index.html"
-                )
-            );
-        }
-
-        next();
+app.get("*", (req, res, next) => {
+    if (
+        req.path.startsWith("/api/") ||
+        req.path.startsWith("/admin")
+    ) {
+        return next();
     }
-);
+
+    res.sendFile(
+        path.join(PUBLIC_DIR, "index.html")
+    );
+});
 
 /* =========================================================
    404
-   ========================================================= */
+========================================================= */
 
-app.use(
-    (req, res) => {
+app.use((req, res) => {
+    res.status(404).json({
+        error: "Route not found."
+    });
+});
 
-        res.status(404).json({
+/* =========================================================
+   ERROR HANDLER
+========================================================= */
 
-            error:
-                "Page or API endpoint not found."
-        });
-    }
-);
+app.use((err, req, res, next) => {
+    console.error("Server error:", err);
+
+    res.status(500).json({
+        error: "Internal server error."
+    });
+});
 
 /* =========================================================
    START SERVER
-   ========================================================= */
+========================================================= */
 
-const server =
-    app.listen(
-        PORT,
-        "127.0.0.1",
-        () => {
+const server = app.listen(
+    PORT,
+    "0.0.0.0",
+    () => {
+        console.log(`
+==============================================
 
-            console.log("");
+             NEXA AI SERVER ONLINE
 
-            console.log(
-                "=============================================="
-            );
+==============================================
 
-            console.log(
-                "           NEXA AI SERVER ONLINE"
-            );
+PORT:     ${PORT}
 
-            console.log(
-                "=============================================="
-            );
+USER APP:
+http://0.0.0.0:${PORT}/
 
-            console.log(
-                `USER APP: http://localhost:${PORT}/`
-            );
+ADMIN:
+http://0.0.0.0:${PORT}/admin/
 
-            console.log(
-                `ADMIN:    http://localhost:${PORT}/admin/`
-            );
+HEALTH:
+http://0.0.0.0:${PORT}/api/health
 
-            console.log(
-                `HEALTH:   http://localhost:${PORT}/api/health`
-            );
+==============================================
 
-            console.log(
-                "=============================================="
-            );
+FREE PLAN: 1 AI MESSAGE
+PRO PLAN: UNLIMITED AI MESSAGES
 
-            console.log(
-                "FREE PLAN: 1 AI MESSAGE"
-            );
+==============================================
 
-            console.log(
-                "PRO PLAN: UNLIMITED AI MESSAGES"
-            );
+Gemini: ${GEMINI_API_KEY ? "KEY FOUND" : "KEY MISSING"}
 
-            console.log(
-                "=============================================="
-            );
+==============================================
 
-            console.log(
-                "Gemini:",
-                GEMINI_API_KEY
-                    ? "KEY FOUND"
-                    : "NOT CONFIGURED"
-            );
-
-            console.log(
-                "=============================================="
-            );
-
-            console.log(
-                "SERVER IS RUNNING - DO NOT CLOSE THIS WINDOW"
-            );
-
-            console.log(
-                "Waiting for requests..."
-            );
-
-            console.log("");
-        }
-    );
-
-/* =========================================================
-   SERVER ERROR
-   ========================================================= */
-
-server.on(
-    "error",
-    error => {
-
-        console.error("");
-
-        console.error(
-            "=============================================="
-        );
-
-        console.error(
-            "              NEXA SERVER ERROR"
-        );
-
-        console.error(
-            "=============================================="
-        );
-
-        console.error(
-            error
-        );
-
-        console.error(
-            "=============================================="
-        );
-    }
-);
-
-/* =========================================================
-   UNCAUGHT EXCEPTION
-   ========================================================= */
-
-process.on(
-    "uncaughtException",
-    error => {
-
-        console.error(
-            "UNCAUGHT EXCEPTION:",
-            error
-        );
-    }
-);
-
-/* =========================================================
-   UNHANDLED REJECTION
-   ========================================================= */
-
-process.on(
-    "unhandledRejection",
-    error => {
-
-        console.error(
-            "UNHANDLED REJECTION:",
-            error
-        );
+SERVER IS RUNNING
+==============================================
+`);
     }
 );
 
 /* =========================================================
    HEARTBEAT
-   ========================================================= */
+========================================================= */
 
-setInterval(
-    () => {
-        // NEXA heartbeat
-    },
-    30000
-);
+setInterval(() => {
+    console.log(
+        `[NEXA] Server heartbeat ${new Date().toISOString()}`
+    );
+}, 60000);
 
 /* =========================================================
    GRACEFUL SHUTDOWN
-   ========================================================= */
+========================================================= */
 
-process.on(
-    "SIGINT",
-    () => {
+function shutdown(signal) {
+    console.log(`\n[NEXA] ${signal} received. Shutting down...`);
 
-        console.log("");
+    server.close(() => {
+        console.log("[NEXA] Server closed.");
+        process.exit(0);
+    });
 
-        console.log(
-            "Stopping NEXA AI server..."
-        );
+    setTimeout(() => {
+        console.log("[NEXA] Forced shutdown.");
+        process.exit(1);
+    }, 10000);
+}
 
-        server.close(
-            () => {
-
-                console.log(
-                    "NEXA AI server stopped."
-                );
-
-                process.exit(0);
-            }
-        );
-    }
-);
-
-process.on(
-    "SIGTERM",
-    () => {
-
-        server.close(
-            () => {
-
-                process.exit(0);
-            }
-        );
-    }
-);
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
