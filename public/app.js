@@ -1,24 +1,22 @@
 
 /* =========================================================
-   NEXA AI - FRONTEND JAVASCRIPT
-   USER APP ONLY
-
-   FREE = 1 SUCCESSFUL AI MESSAGE
-   PRO  = UNLIMITED AI MESSAGES
+   NEXA AI — USER APP
+   Full client-side controller
    ========================================================= */
 
 "use strict";
 
 /* =========================================================
-   GLOBAL STATE
+   STATE
    ========================================================= */
 
 const state = {
     token:
-        localStorage.getItem("nexa_token") ||
         localStorage.getItem("nexa_session") ||
+        localStorage.getItem("nexa_token") ||
         "",
-    user: null
+    user: null,
+    sending: false
 };
 
 /* =========================================================
@@ -30,159 +28,62 @@ function $(id) {
 }
 
 /* =========================================================
-   INITIALIZATION
+   TOAST
    ========================================================= */
 
-document.addEventListener("DOMContentLoaded", () => {
-    setupEvents();
+function showToast(message, duration = 3500) {
+    const toast = $("toast");
+
+    if (!toast) {
+        alert(message);
+        return;
+    }
+
+    toast.textContent = message;
+    toast.classList.add("show");
+
+    clearTimeout(window.nexaToastTimer);
+
+    window.nexaToastTimer = setTimeout(() => {
+        toast.classList.remove("show");
+    }, duration);
+}
+
+/* =========================================================
+   LOADING
+   ========================================================= */
+
+function setLoading(show) {
+    const overlay = $("loadingOverlay");
+
+    if (!overlay) return;
+
+    if (show) {
+        overlay.classList.remove("hidden");
+    } else {
+        overlay.classList.add("hidden");
+    }
+}
+
+/* =========================================================
+   SESSION
+   ========================================================= */
+
+function saveSession(sessionId) {
+    state.token = sessionId || "";
 
     if (state.token) {
-        loadCurrentUser();
-    } else {
-        showAuthScreen();
+        localStorage.setItem("nexa_session", state.token);
+        localStorage.setItem("nexa_token", state.token);
     }
-});
-
-/* =========================================================
-   EVENT SETUP
-   ========================================================= */
-
-function setupEvents() {
-    const loginForm = $("loginForm");
-
-    if (loginForm) {
-        loginForm.addEventListener("submit", handleLogin);
-    }
-
-    const registerForm = $("registerForm");
-
-    if (registerForm) {
-        registerForm.addEventListener("submit", handleRegister);
-    }
-
-    const chatForm = $("chatForm");
-
-    if (chatForm) {
-        chatForm.addEventListener("submit", handleChatSubmit);
-    }
-
-    const chatInput = $("chatInput");
-
-    if (chatInput) {
-        chatInput.addEventListener("keydown", (event) => {
-            if (
-                event.key === "Enter" &&
-                !event.shiftKey
-            ) {
-                event.preventDefault();
-                handleChatSubmit(event);
-            }
-        });
-
-        chatInput.addEventListener("input", () => {
-            chatInput.style.height = "auto";
-
-            chatInput.style.height =
-                Math.min(
-                    chatInput.scrollHeight,
-                    180
-                ) + "px";
-        });
-    }
-}
-
-/* =========================================================
-   AUTH SCREEN
-   ========================================================= */
-
-function showAuthScreen() {
-    const authScreen = $("authScreen");
-    const appScreen = $("appScreen");
-
-    if (authScreen) {
-        authScreen.classList.remove("hidden");
-    }
-
-    if (appScreen) {
-        appScreen.classList.add("hidden");
-    }
-}
-
-function showAppScreen() {
-    const authScreen = $("authScreen");
-    const appScreen = $("appScreen");
-
-    if (authScreen) {
-        authScreen.classList.add("hidden");
-    }
-
-    if (appScreen) {
-        appScreen.classList.remove("hidden");
-    }
-}
-
-/* =========================================================
-   AUTH TABS
-   ========================================================= */
-
-function showAuth(type) {
-    const loginTab = $("loginTab");
-    const registerTab = $("registerTab");
-    const loginForm = $("loginForm");
-    const registerForm = $("registerForm");
-
-    if (
-        !loginTab ||
-        !registerTab ||
-        !loginForm ||
-        !registerForm
-    ) {
-        return;
-    }
-
-    if (type === "login") {
-        loginTab.classList.add("active");
-        registerTab.classList.remove("active");
-
-        loginForm.classList.remove("hidden");
-        registerForm.classList.add("hidden");
-    } else {
-        loginTab.classList.remove("active");
-        registerTab.classList.add("active");
-
-        loginForm.classList.add("hidden");
-        registerForm.classList.remove("hidden");
-    }
-}
-
-/* =========================================================
-   SESSION MANAGEMENT
-   ========================================================= */
-
-function saveSession(sessionValue) {
-    if (!sessionValue) {
-        return;
-    }
-
-    state.token = String(sessionValue);
-
-    localStorage.setItem(
-        "nexa_token",
-        state.token
-    );
-
-    localStorage.setItem(
-        "nexa_session",
-        state.token
-    );
 }
 
 function clearSession() {
     state.token = "";
     state.user = null;
 
-    localStorage.removeItem("nexa_token");
     localStorage.removeItem("nexa_session");
+    localStorage.removeItem("nexa_token");
 }
 
 /* =========================================================
@@ -193,28 +94,29 @@ async function api(url, options = {}) {
     const config = {
         ...options,
         headers: {
-            "Content-Type": "application/json",
             ...(options.headers || {})
         }
     };
 
-    /*
-     * Send the NEXA session ID.
-     */
-
-    if (state.token) {
-        config.headers["x-session-id"] =
-            state.token;
-
-        /*
-         * Keep Authorization too for compatibility.
-         */
-
-        config.headers.Authorization =
-            "Bearer " + state.token;
+    if (options.body && typeof options.body !== "string") {
+        config.headers["Content-Type"] = "application/json";
+        config.body = JSON.stringify(options.body);
     }
 
-    const response = await fetch(url, config);
+    if (state.token) {
+        config.headers["x-session-id"] = state.token;
+        config.headers["Authorization"] = "Bearer " + state.token;
+    }
+
+    let response;
+
+    try {
+        response = await fetch(url, config);
+    } catch (error) {
+        throw new Error(
+            "Unable to connect to NEXA server. Please check your internet connection."
+        );
+    }
 
     let data = {};
 
@@ -232,7 +134,7 @@ async function api(url, options = {}) {
         );
 
         error.status = response.status;
-        error.code = data.code || "";
+        error.code = data.code;
         error.data = data;
 
         throw error;
@@ -242,297 +144,341 @@ async function api(url, options = {}) {
 }
 
 /* =========================================================
-   REGISTER
+   AUTH SCREEN
    ========================================================= */
 
-async function handleRegister(event) {
-    event.preventDefault();
+function showAuth(type) {
+    const loginForm = $("loginForm");
+    const registerForm = $("registerForm");
+    const loginTab = $("loginTab");
+    const registerTab = $("registerTab");
 
-    const username =
-        $("registerUsername").value.trim();
+    if (!loginForm || !registerForm) return;
 
-    const password =
-        $("registerPassword").value;
+    if (type === "register") {
+        loginForm.classList.add("hidden");
+        registerForm.classList.remove("hidden");
 
-    const confirmPassword =
-        $("registerConfirm").value;
+        if (loginTab) loginTab.classList.remove("active");
+        if (registerTab) registerTab.classList.add("active");
+    } else {
+        registerForm.classList.add("hidden");
+        loginForm.classList.remove("hidden");
 
-    if (username.length < 3) {
-        showToast(
-            "Username must be at least 3 characters.",
-            "error"
-        );
-        return;
+        if (registerTab) registerTab.classList.remove("active");
+        if (loginTab) loginTab.classList.add("active");
+    }
+}
+
+/* =========================================================
+   SHOW / HIDE APP
+   ========================================================= */
+
+function showApp() {
+    const authScreen = $("authScreen");
+    const appScreen = $("appScreen");
+
+    if (authScreen) {
+        authScreen.classList.add("hidden");
     }
 
-    if (password.length < 6) {
-        showToast(
-            "Password must be at least 6 characters.",
-            "error"
-        );
-        return;
+    if (appScreen) {
+        appScreen.classList.remove("hidden");
     }
 
-    if (password !== confirmPassword) {
-        showToast(
-            "Passwords do not match.",
-            "error"
-        );
-        return;
+    updateUserUI();
+}
+
+function showLogin() {
+    const authScreen = $("authScreen");
+    const appScreen = $("appScreen");
+
+    if (appScreen) {
+        appScreen.classList.add("hidden");
     }
 
-    setLoading(true);
-
-    try {
-        const response = await fetch(
-            "/api/register",
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type":
-                        "application/json"
-                },
-                body: JSON.stringify({
-                    username,
-                    password
-                })
-            }
-        );
-
-        const result =
-            await response.json();
-
-        if (!response.ok) {
-            throw new Error(
-                result.error ||
-                "Registration failed."
-            );
-        }
-
-        const sessionValue =
-            result.sessionId ||
-            result.token ||
-            result.session ||
-            "";
-
-        if (!sessionValue) {
-            throw new Error(
-                "Account created, but no login session was returned."
-            );
-        }
-
-        saveSession(sessionValue);
-
-        state.user =
-            result.user || null;
-
-        $("registerForm").reset();
-
-        if (!state.user) {
-            await loadCurrentUser();
-        } else {
-            showAppScreen();
-            updateUserUI();
-        }
-
-        navigateTo("chatPage");
-
-        showToast(
-            "Account created successfully!",
-            "success"
-        );
-
-    } catch (error) {
-        console.error(
-            "Registration error:",
-            error
-        );
-
-        showToast(
-            error.message,
-            "error"
-        );
-
-    } finally {
-        setLoading(false);
+    if (authScreen) {
+        authScreen.classList.remove("hidden");
     }
+
+    showAuth("login");
 }
 
 /* =========================================================
    LOGIN
    ========================================================= */
 
-async function handleLogin(event) {
-    event.preventDefault();
+async function login(event) {
+    if (event) {
+        event.preventDefault();
+    }
 
-    const username =
-        $("loginUsername").value.trim();
+    const usernameInput = $("loginUsername");
+    const passwordInput = $("loginPassword");
 
-    const password =
-        $("loginPassword").value;
+    const username = usernameInput
+        ? usernameInput.value.trim()
+        : "";
+
+    const password = passwordInput
+        ? passwordInput.value
+        : "";
 
     if (!username || !password) {
-        showToast(
-            "Enter username and password.",
-            "error"
-        );
+        showToast("⚠️ Enter your username and password.");
         return;
     }
 
     setLoading(true);
 
     try {
-        const response = await fetch(
-            "/api/login",
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type":
-                        "application/json"
-                },
-                body: JSON.stringify({
-                    username,
-                    password
-                })
+        const result = await api("/api/login", {
+            method: "POST",
+            body: {
+                username,
+                password
             }
-        );
+        });
 
-        const data =
-            await response.json();
-
-        if (!response.ok) {
-            throw new Error(
-                data.error ||
-                "Login failed."
-            );
-        }
-
-        /*
-         * Backend uses sessionId.
-         */
-
-        const sessionValue =
-            data.sessionId ||
-            data.token ||
-            data.session ||
+        const sessionId =
+            result.sessionId ||
+            result.token ||
+            result.session ||
             "";
 
-        if (!sessionValue) {
+        if (!sessionId) {
             throw new Error(
-                "Login succeeded, but no session ID was returned."
+                "Login succeeded but no session was returned."
             );
         }
 
-        saveSession(sessionValue);
+        saveSession(sessionId);
 
-        state.user =
-            data.user || null;
-
-        $("loginForm").reset();
-
-        /*
-         * Verify the session.
-         */
+        state.user = result.user || null;
 
         if (!state.user) {
-            const me =
-                await api("/api/me");
-
-            state.user =
-                me.user;
+            await refreshCurrentUser();
         }
 
-        showAppScreen();
+        if (!state.user) {
+            throw new Error("Unable to load your account.");
+        }
 
-        updateUserUI();
-
+        showApp();
         navigateTo("chatPage");
 
         showToast(
-            "Welcome back to NEXA!",
-            "success"
+            "✅ Welcome back, " +
+            state.user.username +
+            "!"
         );
+
+        if (usernameInput) usernameInput.value = "";
+        if (passwordInput) passwordInput.value = "";
 
     } catch (error) {
-        console.error(
-            "Login error:",
-            error
-        );
-
         clearSession();
 
         showToast(
-            error.message,
-            "error"
+            "⚠️ " +
+            (error.message || "Login failed.")
         );
-
     } finally {
         setLoading(false);
     }
 }
 
 /* =========================================================
-   LOAD CURRENT USER
+   REGISTER
    ========================================================= */
 
-async function loadCurrentUser() {
+async function register(event) {
+    if (event) {
+        event.preventDefault();
+    }
+
+    const usernameInput = $("registerUsername");
+    const passwordInput = $("registerPassword");
+    const confirmInput = $("registerConfirm");
+
+    const username = usernameInput
+        ? usernameInput.value.trim()
+        : "";
+
+    const password = passwordInput
+        ? passwordInput.value
+        : "";
+
+    const confirm = confirmInput
+        ? confirmInput.value
+        : "";
+
+    if (!username || !password || !confirm) {
+        showToast("⚠️ Please fill in all fields.");
+        return;
+    }
+
+    if (username.length < 3) {
+        showToast(
+            "⚠️ Username must be at least 3 characters."
+        );
+        return;
+    }
+
+    if (password.length < 4) {
+        showToast(
+            "⚠️ Password must be at least 4 characters."
+        );
+        return;
+    }
+
+    if (password !== confirm) {
+        showToast("⚠️ Passwords do not match.");
+        return;
+    }
+
+    setLoading(true);
+
     try {
-        const data =
-            await api("/api/me");
+        const result = await api("/api/register", {
+            method: "POST",
+            body: {
+                username,
+                password
+            }
+        });
 
-        state.user =
-            data.user;
+        const sessionId =
+            result.sessionId ||
+            result.token ||
+            result.session ||
+            "";
 
-        if (!state.user) {
+        if (!sessionId) {
             throw new Error(
-                "User session is invalid."
+                "Account created, but no login session was returned."
             );
         }
 
-        showAppScreen();
+        saveSession(sessionId);
 
-        updateUserUI();
+        state.user = result.user || null;
+
+        if (!state.user) {
+            await refreshCurrentUser();
+        }
+
+        showApp();
+        navigateTo("chatPage");
+
+        showToast("✅ Account created successfully!");
+
+        if (usernameInput) usernameInput.value = "";
+        if (passwordInput) passwordInput.value = "";
+        if (confirmInput) confirmInput.value = "";
 
     } catch (error) {
-        console.error(
-            "Session restore failed:",
-            error
+        showToast(
+            "⚠️ " +
+            (error.message || "Registration failed.")
         );
-
-        clearSession();
-
-        showAuthScreen();
+    } finally {
+        setLoading(false);
     }
 }
 
 /* =========================================================
-   REFRESH USER
+   CURRENT USER
    ========================================================= */
 
 async function refreshCurrentUser() {
     if (!state.token) {
+        state.user = null;
         return null;
     }
 
     try {
-        const data =
-            await api("/api/me");
+        const result = await api("/api/me", {
+            method: "GET"
+        });
 
         state.user =
-            data.user;
+            result.user ||
+            result.data ||
+            result ||
+            null;
 
-        updateUserUI();
+        if (state.user && state.user.user) {
+            state.user = state.user.user;
+        }
+
+        if (state.user) {
+            updateUserUI();
+        }
 
         return state.user;
 
     } catch (error) {
-        console.warn(
-            "Unable to refresh user:",
-            error
-        );
+        if (error.status === 401) {
+            clearSession();
+        }
 
+        state.user = null;
         return null;
     }
+}
+
+/* =========================================================
+   USER UI
+   ========================================================= */
+
+function updateUserUI() {
+    if (!state.user) return;
+
+    const username =
+        state.user.username || "User";
+
+    const plan =
+        String(state.user.plan || "free").toLowerCase();
+
+    const isPro = plan === "pro";
+
+    const sidebarUsername = $("sidebarUsername");
+    const sidebarPlan = $("sidebarPlan");
+    const mobilePlan = $("mobilePlan");
+    const accountUsername = $("accountUsername");
+    const accountPlan = $("accountPlan");
+    const accountProStatus = $("accountProStatus");
+
+    if (sidebarUsername) {
+        sidebarUsername.textContent = username;
+    }
+
+    if (sidebarPlan) {
+        sidebarPlan.textContent =
+            isPro ? "NEXA PRO" : "FREE PLAN";
+    }
+
+    if (mobilePlan) {
+        mobilePlan.textContent =
+            isPro ? "PRO" : "FREE";
+    }
+
+    if (accountUsername) {
+        accountUsername.textContent = username;
+    }
+
+    if (accountPlan) {
+        accountPlan.textContent =
+            isPro ? "NEXA PRO" : "FREE";
+    }
+
+    if (accountProStatus) {
+        accountProStatus.textContent =
+            isPro ? "Active" : "Not active";
+    }
+
+    updateProPage();
 }
 
 /* =========================================================
@@ -540,274 +486,19 @@ async function refreshCurrentUser() {
    ========================================================= */
 
 function getProRequestStatus() {
-    if (!state.user) {
+    if (!state.user || !state.user.proRequest) {
         return "";
     }
 
-    const request =
-        state.user.proRequest;
+    const request = state.user.proRequest;
 
-    if (!request) {
-        return "";
-    }
-
-    /*
-     * Current backend:
-     *
-     * {
-     *   status: "pending",
-     *   requestedAt: "..."
-     * }
-     */
-
-    if (
-        typeof request === "object"
-    ) {
+    if (typeof request === "object") {
         return String(
             request.status || ""
         ).toLowerCase();
     }
 
-    /*
-     * Compatibility with old format.
-     */
-
-    return String(
-        request
-    ).toLowerCase();
-}
-
-/* =========================================================
-   UPDATE USER UI
-   ========================================================= */
-
-function updateUserUI() {
-    if (!state.user) {
-        return;
-    }
-
-    const username =
-        state.user.username || "User";
-
-    const isPro =
-        state.user.plan === "pro";
-
-    const proRequest =
-        getProRequestStatus();
-
-    const sidebarUsername =
-        $("sidebarUsername");
-
-    const sidebarPlan =
-        $("sidebarPlan");
-
-    const accountUsername =
-        $("accountUsername");
-
-    const accountPlan =
-        $("accountPlan");
-
-    const accountProStatus =
-        $("accountProStatus");
-
-    const mobilePlan =
-        $("mobilePlan");
-
-    if (sidebarUsername) {
-        sidebarUsername.textContent =
-            username;
-    }
-
-    if (sidebarPlan) {
-        sidebarPlan.textContent =
-            isPro
-                ? "NEXA PRO"
-                : "FREE PLAN";
-    }
-
-    if (accountUsername) {
-        accountUsername.textContent =
-            username;
-    }
-
-    if (accountPlan) {
-        accountPlan.textContent =
-            isPro
-                ? "NEXA PRO"
-                : "FREE";
-    }
-
-    if (accountProStatus) {
-        accountProStatus.textContent =
-            getProStatusText(
-                isPro,
-                proRequest
-            );
-    }
-
-    if (mobilePlan) {
-        mobilePlan.textContent =
-            isPro
-                ? "PRO"
-                : "FREE";
-    }
-
-    updateUsageUI();
-    updateProPage();
-}
-
-/* =========================================================
-   USAGE
-   ========================================================= */
-
-function getRemainingMessages() {
-    if (!state.user) {
-        return null;
-    }
-
-    if (state.user.plan === "pro") {
-        return null;
-    }
-
-    if (
-        typeof state.user.aiMessagesRemaining ===
-        "number"
-    ) {
-        return Math.max(
-            0,
-            state.user.aiMessagesRemaining
-        );
-    }
-
-    const used =
-        Number(
-            state.user.aiMessagesUsed || 0
-        );
-
-    return Math.max(
-        0,
-        1 - used
-    );
-}
-
-/* =========================================================
-   UPDATE USAGE UI
-   ========================================================= */
-
-function updateUsageUI() {
-    if (!state.user) {
-        return;
-    }
-
-    const isPro =
-        state.user.plan === "pro";
-
-    const remaining =
-        getRemainingMessages();
-
-    const sidebarUsage =
-        $("sidebarUsage");
-
-    const accountUsage =
-        $("accountUsage");
-
-    const chatUsage =
-        $("chatUsage");
-
-    const mobileUsage =
-        $("mobileUsage");
-
-    if (isPro) {
-        setElementText(
-            sidebarUsage,
-            "∞ UNLIMITED AI MESSAGES"
-        );
-
-        setElementText(
-            accountUsage,
-            "∞ UNLIMITED AI MESSAGES"
-        );
-
-        setElementText(
-            chatUsage,
-            "💎 PRO — UNLIMITED AI MESSAGES"
-        );
-
-        setElementText(
-            mobileUsage,
-            "∞ UNLIMITED"
-        );
-
-        return;
-    }
-
-    const text =
-        remaining === 1
-            ? "1 AI MESSAGE REMAINING"
-            : "0 AI MESSAGES REMAINING";
-
-    setElementText(
-        sidebarUsage,
-        text
-    );
-
-    setElementText(
-        accountUsage,
-        text
-    );
-
-    setElementText(
-        chatUsage,
-        remaining === 1
-            ? "🆓 FREE — 1 AI MESSAGE REMAINING"
-            : "🔒 FREE LIMIT REACHED — UPGRADE TO PRO"
-    );
-
-    setElementText(
-        mobileUsage,
-        remaining === 1
-            ? "1 LEFT"
-            : "0 LEFT"
-    );
-}
-
-/* =========================================================
-   SET ELEMENT TEXT
-   ========================================================= */
-
-function setElementText(element, text) {
-    if (!element) {
-        return;
-    }
-
-    element.textContent = text;
-}
-
-/* =========================================================
-   PRO STATUS TEXT
-   ========================================================= */
-
-function getProStatusText(
-    isPro,
-    request
-) {
-    if (isPro) {
-        return "Active";
-    }
-
-    if (request === "pending") {
-        return "Request Pending";
-    }
-
-    if (request === "rejected") {
-        return "Request Rejected";
-    }
-
-    if (request === "cancelled") {
-        return "Request Cancelled";
-    }
-
-    return "Not active";
+    return String(request).toLowerCase();
 }
 
 /* =========================================================
@@ -815,112 +506,75 @@ function getProStatusText(
    ========================================================= */
 
 function updateProPage() {
-    if (!state.user) {
+    const action = $("proAction");
+
+    if (!action || !state.user) {
         return;
     }
 
-    const container =
-        $("proAction");
+    const plan =
+        String(state.user.plan || "free").toLowerCase();
 
-    if (!container) {
-        return;
-    }
-
-    const isPro =
-        state.user.plan === "pro";
-
-    const request =
-        getProRequestStatus();
-
-    if (isPro) {
-        container.innerHTML = `
+    if (plan === "pro") {
+        action.innerHTML = `
             <div class="pro-active">
-
-                <div class="pro-active-icon">
-                    ✓
-                </div>
-
-                <div>
-                    <strong>
-                        NEXA PRO ACTIVE
-                    </strong>
-
-                    <p>
-                        Your account has full Pro access.
-                        AI messages are unlimited.
-                    </p>
-                </div>
-
+                <strong>✓ NEXA PRO ACTIVE</strong>
+                <p>You have unlimited AI access.</p>
             </div>
         `;
-
         return;
     }
 
-    if (request === "pending") {
-        container.innerHTML = `
-            <div class="request-pending">
+    const status = getProRequestStatus();
 
-                <div>
-                    <strong>
-                        REQUEST PENDING
-                    </strong>
-
-                    <p>
-                        The developer is reviewing your request.
-                    </p>
-                </div>
-
+    if (
+        status === "pending" ||
+        status === "requested"
+    ) {
+        action.innerHTML = `
+            <div class="pro-pending">
+                <strong>⏳ PRO REQUEST PENDING</strong>
+                <p>
+                    Your request has been sent to the developer.
+                    Please wait for approval.
+                </p>
                 <button
-                    class="cancel-btn"
-                    type="button"
+                    class="pro-btn"
                     onclick="cancelProRequest()">
-
-                    Cancel Request
-
+                    CANCEL REQUEST
                 </button>
-
             </div>
         `;
-
         return;
     }
 
-    if (request === "rejected") {
-        container.innerHTML = `
-            <div class="request-rejected">
-
+    if (
+        status === "rejected" ||
+        status === "revoked"
+    ) {
+        action.innerHTML = `
+            <div class="pro-rejected">
                 <strong>
-                    REQUEST REJECTED
+                    ⚠ PRO REQUEST ${status.toUpperCase()}
                 </strong>
-
                 <p>
                     You can submit another request.
                 </p>
-
                 <button
                     class="pro-btn"
-                    type="button"
                     onclick="requestPro()">
-
-                    REQUEST AGAIN — ₹99
-
+                    REQUEST PRO ACCESS — ₹99
                 </button>
-
             </div>
         `;
-
         return;
     }
 
-    container.innerHTML = `
+    action.innerHTML = `
         <button
             class="pro-btn"
-            type="button"
             onclick="requestPro()">
-
             REQUEST PRO ACCESS — ₹99
-
         </button>
 
         <p>
@@ -935,93 +589,91 @@ function updateProPage() {
    ========================================================= */
 
 async function requestPro() {
-
-    /*
-     * If there is no session,
-     * login is actually required.
-     */
-
     if (!state.token) {
-        showToast(
-            "Please login first.",
-            "error"
-        );
+        showToast("⚠️ Please login first.");
+        showLogin();
+        return;
+    }
 
-        showAuthScreen();
-        showAuth("login");
+    if (!state.user) {
+        setLoading(true);
+
+        try {
+            await refreshCurrentUser();
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    if (!state.user) {
+        clearSession();
+        showLogin();
+
+        showToast(
+            "⚠️ Your session expired. Please login again."
+        );
 
         return;
     }
 
-    /*
-     * Restore user if necessary.
-     */
+    const currentPlan =
+        String(state.user.plan || "free").toLowerCase();
 
-    if (!state.user) {
-        await refreshCurrentUser();
+    if (currentPlan === "pro") {
+        showToast("✅ You already have NEXA Pro.");
+        updateProPage();
+        return;
     }
 
-    if (!state.user) {
+    const currentStatus =
+        getProRequestStatus();
+
+    if (
+        currentStatus === "pending" ||
+        currentStatus === "requested"
+    ) {
         showToast(
-            "Your login session could not be verified. Please login again.",
-            "error"
+            "⏳ Your Pro request is already pending."
         );
-
-        clearSession();
-        showAuthScreen();
-        showAuth("login");
-
         return;
     }
 
     setLoading(true);
 
     try {
-        const data =
-            await api(
-                "/api/pro/request",
-                {
-                    method: "POST"
-                }
-            );
+        const result = await api(
+            "/api/pro/request",
+            {
+                method: "POST"
+            }
+        );
 
         state.user =
-            data.user ||
-            state.user;
+            result.user || state.user;
 
         updateUserUI();
+        updateProPage();
 
         showToast(
-            "Pro request sent to the developer.",
-            "success"
+            "✅ Pro request sent to the developer."
         );
 
     } catch (error) {
-
-        console.error(
-            "Pro request error:",
-            error
-        );
-
-        if (
-            error.status === 401
-        ) {
+        if (error.status === 401) {
             clearSession();
-
-            showAuthScreen();
-            showAuth("login");
+            showLogin();
 
             showToast(
-                "Your login session has expired. Please login again.",
-                "error"
+                "⚠️ Your session expired. Please login again."
             );
 
             return;
         }
 
         showToast(
-            error.message,
-            "error"
+            "⚠️ " +
+            (error.message ||
+                "Unable to request Pro.")
         );
 
     } finally {
@@ -1034,67 +686,46 @@ async function requestPro() {
    ========================================================= */
 
 async function cancelProRequest() {
-
     if (!state.token) {
-        showToast(
-            "Please login first.",
-            "error"
-        );
-
-        showAuthScreen();
-        showAuth("login");
-
+        showToast("⚠️ Please login first.");
+        showLogin();
         return;
     }
 
     setLoading(true);
 
     try {
-        const data =
-            await api(
-                "/api/pro/cancel",
-                {
-                    method: "POST"
-                }
-            );
+        const result = await api(
+            "/api/pro/cancel",
+            {
+                method: "POST"
+            }
+        );
 
         state.user =
-            data.user ||
-            state.user;
+            result.user || state.user;
 
         updateUserUI();
+        updateProPage();
 
-        showToast(
-            "Pro request cancelled.",
-            "success"
-        );
+        showToast("✅ Pro request cancelled.");
 
     } catch (error) {
-
-        console.error(
-            "Cancel Pro error:",
-            error
-        );
-
-        if (
-            error.status === 401
-        ) {
+        if (error.status === 401) {
             clearSession();
-
-            showAuthScreen();
-            showAuth("login");
+            showLogin();
 
             showToast(
-                "Your login session has expired. Please login again.",
-                "error"
+                "⚠️ Your session expired. Please login again."
             );
 
             return;
         }
 
         showToast(
-            error.message,
-            "error"
+            "⚠️ " +
+            (error.message ||
+                "Unable to cancel request.")
         );
 
     } finally {
@@ -1110,409 +741,72 @@ function navigateTo(pageId) {
     const pages =
         document.querySelectorAll(".page");
 
-    pages.forEach((page) => {
-        page.classList.remove(
-            "active-page"
-        );
+    const buttons =
+        document.querySelectorAll(".nav-btn");
+
+    pages.forEach(page => {
+        page.classList.remove("active-page");
     });
 
-    const target =
-        $(pageId);
+    buttons.forEach(button => {
+        button.classList.remove("active");
+    });
+
+    const target = $(pageId);
 
     if (target) {
-        target.classList.add(
-            "active-page"
-        );
+        target.classList.add("active-page");
     }
 
-    const buttons =
-        document.querySelectorAll(
-            ".nav-btn"
-        );
-
-    buttons.forEach((button) => {
-
-        button.classList.remove(
-            "active"
-        );
-
-        if (
-            button.dataset.page ===
-            pageId
-        ) {
-            button.classList.add(
-                "active"
-            );
+    buttons.forEach(button => {
+        if (button.dataset.page === pageId) {
+            button.classList.add("active");
         }
     });
 
-    closeMobileSidebar();
+    if (pageId === "proPage") {
+        updateProPage();
+    }
+
+    toggleSidebar(false);
 }
 
 /* =========================================================
-   MOBILE SIDEBAR
+   SIDEBAR
    ========================================================= */
 
-function toggleSidebar() {
-    const sidebar =
-        $("sidebar");
+function toggleSidebar(force) {
+    const sidebar = $("sidebar");
 
-    if (!sidebar) {
-        return;
-    }
+    if (!sidebar) return;
 
-    sidebar.classList.toggle(
-        "mobile-open"
-    );
-}
-
-function closeMobileSidebar() {
-    const sidebar =
-        $("sidebar");
-
-    if (!sidebar) {
-        return;
-    }
-
-    sidebar.classList.remove(
-        "mobile-open"
-    );
-}
-
-/* =========================================================
-   CHAT
-   ========================================================= */
-
-async function handleChatSubmit(event) {
-    event.preventDefault();
-
-    const input =
-        $("chatInput");
-
-    if (!input) {
-        return;
-    }
-
-    const message =
-        input.value.trim();
-
-    if (!message) {
-        return;
-    }
-
-    if (!state.token) {
-        showToast(
-            "Please login first.",
-            "error"
-        );
-
-        showAuthScreen();
-        showAuth("login");
-
-        return;
-    }
-
-    await refreshCurrentUser();
-
-    if (!state.user) {
-        showToast(
-            "Please login again.",
-            "error"
-        );
-
-        return;
-    }
-
-    /*
-     * Free plan client-side limit.
-     * Server remains the real authority.
-     */
-
-    if (
-        state.user.plan !== "pro" &&
-        getRemainingMessages() <= 0
-    ) {
-        showFreeLimitUI();
-        return;
-    }
-
-    input.value = "";
-    input.style.height = "auto";
-
-    removeWelcomeMessage();
-
-    addUserMessage(message);
-
-    const typingId =
-        addTypingMessage();
-
-    const sendButton =
-        $("sendButton");
-
-    if (sendButton) {
-        sendButton.disabled = true;
-    }
-
-    try {
-
-        const data =
-            await api(
-                "/api/chat",
-                {
-                    method: "POST",
-
-                    body: JSON.stringify({
-                        message
-                    })
-                }
-            );
-
-        removeMessage(
-            typingId
-        );
-
-        addAssistantMessage(
-            data.reply ||
-            "I don't have a response yet."
-        );
-
-        if (state.user) {
-
-            state.user.plan =
-                data.plan ||
-                state.user.plan;
-
-            if (
-                typeof data.aiMessagesUsed ===
-                "number"
-            ) {
-                state.user.aiMessagesUsed =
-                    data.aiMessagesUsed;
-            }
-
-            if (
-                data.aiMessagesRemaining !==
-                undefined
-            ) {
-                state.user.aiMessagesRemaining =
-                    data.aiMessagesRemaining;
-            }
-        }
-
-        updateUserUI();
-
-        await refreshCurrentUser();
-
-        if (
-            state.user &&
-            state.user.plan !== "pro" &&
-            getRemainingMessages() <= 0
-        ) {
-            showToast(
-                "Your 1 free AI message has been used. Upgrade to Pro for unlimited messages.",
-                "info"
-            );
-        }
-
-    } catch (error) {
-
-        removeMessage(
-            typingId
-        );
-
-        if (
-            error.code ===
-            "FREE_LIMIT_REACHED"
-            ||
-            (
-                error.status === 403 &&
-                error.data &&
-                error.data.code ===
-                "FREE_LIMIT_REACHED"
-            )
-        ) {
-
-            await refreshCurrentUser();
-
-            showFreeLimitUI();
-
-            if (sendButton) {
-                sendButton.disabled = false;
-            }
-
-            input.focus();
-
-            return;
-        }
-
-        if (
-            error.status === 401
-        ) {
-
-            addAssistantMessage(
-                "⚠️ Your login session has expired. Please login again."
-            );
-
-            clearSession();
-
-            showAuthScreen();
-            showAuth("login");
-
+    if (typeof force === "boolean") {
+        if (force) {
+            sidebar.classList.add("open");
         } else {
-
-            addAssistantMessage(
-                "⚠️ " +
-                error.message
-            );
-
-            showToast(
-                error.message,
-                "error"
-            );
+            sidebar.classList.remove("open");
         }
-
-    } finally {
-
-        if (sendButton) {
-            sendButton.disabled = false;
-        }
-
-        input.focus();
-    }
-}
-
-/* =========================================================
-   FREE LIMIT UI
-   ========================================================= */
-
-function showFreeLimitUI() {
-    showToast(
-        "Your 1 free AI message has been used. Upgrade to NEXA Pro for unlimited AI messages.",
-        "info"
-    );
-
-    addUpgradeMessage();
-}
-
-/* =========================================================
-   UPGRADE MESSAGE
-   ========================================================= */
-
-function addUpgradeMessage() {
-    const container =
-        $("chatMessages");
-
-    if (!container) {
-        return;
-    }
-
-    if (
-        container.querySelector(
-            ".nexa-upgrade-message"
-        )
-    ) {
-        return;
-    }
-
-    const wrapper =
-        document.createElement("div");
-
-    wrapper.className =
-        "message assistant-message nexa-upgrade-message";
-
-    wrapper.innerHTML = `
-        <div class="message-label">
-            NEXA
-        </div>
-
-        <div class="message-bubble">
-
-            <strong>
-                🔒 Free message limit reached
-            </strong>
-
-            <br><br>
-
-            You have used your
-            <strong>1 free AI message</strong>.
-
-            <br><br>
-
-            Upgrade to
-            <strong>NEXA PRO</strong>
-            for unlimited AI messages.
-
-            <br><br>
-
-            <button
-                type="button"
-                class="pro-btn"
-                onclick="openProPageFromChat()">
-
-                💎 UPGRADE TO PRO — ₹99
-
-            </button>
-
-        </div>
-    `;
-
-    container.appendChild(
-        wrapper
-    );
-
-    scrollChatToBottom();
-}
-
-/* =========================================================
-   OPEN PRO PAGE
-   ========================================================= */
-
-function openProPageFromChat() {
-
-    if (!state.token) {
-        showToast(
-            "Please login first.",
-            "error"
-        );
-
-        showAuthScreen();
-        showAuth("login");
 
         return;
     }
 
-    const possiblePages = [
-        "proPage",
-        "upgradePage",
-        "accountPage"
-    ];
-
-    for (
-        const pageId of possiblePages
-    ) {
-
-        if ($(pageId)) {
-            navigateTo(pageId);
-            return;
-        }
-    }
-
-    showToast(
-        "Open the Pro section to request NEXA Pro.",
-        "info"
-    );
+    sidebar.classList.toggle("open");
 }
 
 /* =========================================================
-   USER MESSAGE
+   CHAT MESSAGE
    ========================================================= */
 
 function addUserMessage(message) {
-    const container =
-        $("chatMessages");
+    const chat = $("chatMessages");
 
-    if (!container) {
-        return;
+    if (!chat) return;
+
+    const welcome =
+        chat.querySelector(".welcome-message");
+
+    if (welcome) {
+        welcome.remove();
     }
 
     const wrapper =
@@ -1522,33 +816,26 @@ function addUserMessage(message) {
         "message user-message";
 
     wrapper.innerHTML = `
-        <div class="message-label">
-            YOU
-        </div>
-
-        <div class="message-bubble">
-            ${escapeHTML(message)}
-        </div>
+        <div class="message-avatar">YOU</div>
+        <div class="message-content"></div>
     `;
 
-    container.appendChild(
-        wrapper
-    );
+    const content =
+        wrapper.querySelector(".message-content");
+
+    if (content) {
+        content.textContent = message;
+    }
+
+    chat.appendChild(wrapper);
 
     scrollChatToBottom();
 }
 
-/* =========================================================
-   ASSISTANT MESSAGE
-   ========================================================= */
-
 function addAssistantMessage(message) {
-    const container =
-        $("chatMessages");
+    const chat = $("chatMessages");
 
-    if (!container) {
-        return;
-    }
+    if (!chat) return null;
 
     const wrapper =
         document.createElement("div");
@@ -1557,20 +844,23 @@ function addAssistantMessage(message) {
         "message assistant-message";
 
     wrapper.innerHTML = `
-        <div class="message-label">
-            NEXA
-        </div>
-
-        <div class="message-bubble">
-            ${formatAssistantText(message)}
-        </div>
+        <div class="message-avatar">N</div>
+        <div class="message-content"></div>
     `;
 
-    container.appendChild(
-        wrapper
-    );
+    const content =
+        wrapper.querySelector(".message-content");
+
+    if (content) {
+        content.innerHTML =
+            formatAssistantText(message);
+    }
+
+    chat.appendChild(wrapper);
 
     scrollChatToBottom();
+
+    return wrapper;
 }
 
 /* =========================================================
@@ -1578,94 +868,295 @@ function addAssistantMessage(message) {
    ========================================================= */
 
 function addTypingMessage() {
-    const container =
-        $("chatMessages");
+    const chat = $("chatMessages");
 
-    if (!container) {
-        return null;
-    }
-
-    const id =
-        "typing-" +
-        Date.now();
+    if (!chat) return null;
 
     const wrapper =
         document.createElement("div");
 
-    wrapper.id = id;
-
     wrapper.className =
-        "message assistant-message";
+        "message assistant-message typing-message";
 
     wrapper.innerHTML = `
-        <div class="message-label">
-            NEXA
-        </div>
-
-        <div class="message-bubble typing">
-            <span></span>
-            <span></span>
-            <span></span>
+        <div class="message-avatar">N</div>
+        <div class="message-content">
+            <span class="typing-dot"></span>
+            <span class="typing-dot"></span>
+            <span class="typing-dot"></span>
         </div>
     `;
 
-    container.appendChild(
-        wrapper
-    );
+    chat.appendChild(wrapper);
 
     scrollChatToBottom();
 
-    return id;
+    return wrapper;
 }
 
 /* =========================================================
-   REMOVE MESSAGE
+   FORMAT AI RESPONSE
    ========================================================= */
 
-function removeMessage(id) {
-    if (!id) {
-        return;
-    }
+function escapeHtml(text) {
+    return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
 
-    const element =
-        $(id);
+function formatAssistantText(text) {
+    let safe = escapeHtml(text || "");
 
-    if (element) {
-        element.remove();
-    }
+    /* Correct bold Markdown conversion */
+    safe = safe.replace(
+        /\*\*(.*?)\*\*/g,
+        "<strong>$1</strong>"
+    );
+
+    safe = safe.replace(
+        /\n/g,
+        "<br>"
+    );
+
+    return safe;
 }
 
 /* =========================================================
-   REMOVE WELCOME
-   ========================================================= */
-
-function removeWelcomeMessage() {
-    const welcome =
-        document.querySelector(
-            ".welcome-message"
-        );
-
-    if (welcome) {
-        welcome.remove();
-    }
-}
-
-/* =========================================================
-   CHAT SCROLL
+   SCROLL CHAT
    ========================================================= */
 
 function scrollChatToBottom() {
-    const container =
-        $("chatMessages");
+    const chat = $("chatMessages");
 
-    if (!container) {
+    if (!chat) return;
+
+    requestAnimationFrame(() => {
+        chat.scrollTop = chat.scrollHeight;
+    });
+}
+
+/* =========================================================
+   SEND MESSAGE
+   ========================================================= */
+
+async function sendMessage(event) {
+    if (event) {
+        event.preventDefault();
+    }
+
+    /* -----------------------------------------------
+       IMPORTANT:
+       Get the actual textarea from the submitted form.
+       ----------------------------------------------- */
+
+    let input = null;
+
+    if (
+        event &&
+        event.currentTarget &&
+        event.currentTarget.elements
+    ) {
+        input =
+            event.currentTarget.elements.namedItem(
+                "chatInput"
+            );
+    }
+
+    /* Fallback */
+    if (!input) {
+        input = $("chatInput");
+    }
+
+    if (!input) {
+        showToast(
+            "⚠️ Chat input not found."
+        );
         return;
     }
 
-    requestAnimationFrame(() => {
-        container.scrollTop =
-            container.scrollHeight;
-    });
+    /* -----------------------------------------------
+       Read the real textarea value
+       ----------------------------------------------- */
+
+    const message =
+        String(input.value || "").trim();
+
+    if (!message) {
+        showToast(
+            "⚠️ Please enter a message."
+        );
+
+        input.focus();
+
+        return;
+    }
+
+    /* -----------------------------------------------
+       Prevent duplicate requests
+       ----------------------------------------------- */
+
+    if (state.sending) {
+        return;
+    }
+
+    /* -----------------------------------------------
+       Authentication
+       ----------------------------------------------- */
+
+    if (!state.token) {
+        showToast(
+            "⚠️ Please login first."
+        );
+
+        showLogin();
+
+        return;
+    }
+
+    /* -----------------------------------------------
+       Restore user if necessary
+       ----------------------------------------------- */
+
+    if (!state.user) {
+        setLoading(true);
+
+        try {
+            await refreshCurrentUser();
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    if (!state.user) {
+        clearSession();
+        showLogin();
+
+        showToast(
+            "⚠️ Your session expired. Please login again."
+        );
+
+        return;
+    }
+
+    state.sending = true;
+
+    const sendButton =
+        $("sendButton");
+
+    if (sendButton) {
+        sendButton.disabled = true;
+    }
+
+    /* -----------------------------------------------
+       Add user message
+       ----------------------------------------------- */
+
+    addUserMessage(message);
+
+    /* Clear textarea */
+    input.value = "";
+    input.style.height = "auto";
+
+    const typing =
+        addTypingMessage();
+
+    try {
+        const result =
+            await api(
+                "/api/chat",
+                {
+                    method: "POST",
+                    body: {
+                        message: message
+                    }
+                }
+            );
+
+        if (typing) {
+            typing.remove();
+        }
+
+        const answer =
+            result.reply ||
+            result.response ||
+            result.answer ||
+            result.text ||
+            "";
+
+        if (!answer) {
+            throw new Error(
+                "NEXA returned an empty response."
+            );
+        }
+
+        addAssistantMessage(answer);
+
+        if (result.user) {
+            state.user =
+                result.user;
+
+            updateUserUI();
+        } else {
+            await refreshCurrentUser();
+        }
+
+    } catch (error) {
+        if (typing) {
+            typing.remove();
+        }
+
+        /* Restore user's message */
+        input.value = message;
+
+        if (
+            error.code ===
+            "FREE_LIMIT_REACHED"
+        ) {
+            addAssistantMessage(
+                "You have used your 1 free AI message.\n\n" +
+                "Upgrade to NEXA Pro for unlimited AI messages."
+            );
+
+            showToast(
+                "⚡ Free message used. Upgrade to NEXA Pro."
+            );
+
+            return;
+        }
+
+        if (error.status === 401) {
+            clearSession();
+            showLogin();
+
+            showToast(
+                "⚠️ Your session expired. Please login again."
+            );
+
+            return;
+        }
+
+        addAssistantMessage(
+            "⚠️ " +
+            (
+                error.message ||
+                "Something went wrong while contacting NEXA."
+            )
+        );
+
+    } finally {
+        state.sending = false;
+
+        if (sendButton) {
+            sendButton.disabled = false;
+        }
+
+        input.focus();
+
+        scrollChatToBottom();
+    }
 }
 
 /* =========================================================
@@ -1673,20 +1164,31 @@ function scrollChatToBottom() {
    ========================================================= */
 
 function useSuggestion(text) {
-    const input =
-        $("chatInput");
+    const input = $("chatInput");
 
-    if (!input) {
-        return;
-    }
+    if (!input) return;
 
-    input.value =
-        text;
+    input.value = text;
 
     input.focus();
 
-    input.style.height =
-        "auto";
+    const form = $("chatForm");
+
+    if (form) {
+        form.requestSubmit();
+    }
+}
+
+/* =========================================================
+   CHAT INPUT RESIZE
+   ========================================================= */
+
+function resizeChatInput() {
+    const input = $("chatInput");
+
+    if (!input) return;
+
+    input.style.height = "auto";
 
     input.style.height =
         Math.min(
@@ -1696,225 +1198,194 @@ function useSuggestion(text) {
 }
 
 /* =========================================================
-   FORMAT AI TEXT
-   ========================================================= */
-
-function formatAssistantText(text) {
-    let safe =
-        escapeHTML(
-            String(text)
-        );
-
-    /*
-     * Convert **text** to bold.
-     */
-
-    safe =
-        safe.replace(
-            /\*\*(.*?)\*\*/g,
-            "<strong>$1</strong>"
-        );
-
-    /*
-     * Convert new lines.
-     */
-
-    safe =
-        safe.replace(
-            /\n/g,
-            "<br>"
-        );
-
-    return safe;
-}
-
-/* =========================================================
-   ESCAPE HTML
-   ========================================================= */
-
-function escapeHTML(value) {
-    return String(value)
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
-}
-
-/* =========================================================
    LOGOUT
    ========================================================= */
 
 async function logout() {
-
     try {
-
         if (state.token) {
-
-            await fetch(
+            await api(
                 "/api/logout",
                 {
-                    method: "POST",
-
-                    headers: {
-                        "Content-Type":
-                            "application/json",
-
-                        "x-session-id":
-                            state.token,
-
-                        "Authorization":
-                            "Bearer " +
-                            state.token
-                    }
+                    method: "POST"
                 }
             );
         }
-
-    } catch (error) {
-
-        console.warn(
-            "Logout request failed:",
-            error
-        );
+    } catch {
+        /* Ignore logout server errors */
     }
 
     clearSession();
 
-    showAuthScreen();
+    showLogin();
 
-    showAuth("login");
+    const chat =
+        $("chatMessages");
+
+    if (chat) {
+        chat.innerHTML = `
+            <div class="welcome-message">
+                <div class="welcome-icon">
+                    N
+                </div>
+
+                <h2>
+                    Hello, I'm NEXA.
+                </h2>
+
+                <p>
+                    Your personal AI assistant is ready.
+                </p>
+
+                <div class="suggestions">
+
+                    <button
+                        onclick="useSuggestion('What can you do?')">
+                        What can you do?
+                    </button>
+
+                    <button
+                        onclick="useSuggestion('Explain artificial intelligence simply.')">
+                        Explain AI
+                    </button>
+
+                    <button
+                        onclick="useSuggestion('Give me some useful ideas.')">
+                        Give me ideas
+                    </button>
+
+                </div>
+            </div>
+        `;
+    }
 
     showToast(
-        "Logged out successfully.",
-        "success"
+        "👋 Logged out successfully."
     );
 }
 
 /* =========================================================
-   TOAST
+   ENTER KEY
    ========================================================= */
 
-let toastTimer = null;
+function setupChatKeyboard() {
+    const input = $("chatInput");
 
-function showToast(
-    message,
-    type = "info"
-) {
-    const toast =
-        $("toast");
+    if (!input) return;
 
-    if (!toast) {
+    input.addEventListener(
+        "input",
+        resizeChatInput
+    );
+
+    input.addEventListener(
+        "keydown",
+        event => {
+            if (
+                event.key === "Enter" &&
+                !event.shiftKey
+            ) {
+                event.preventDefault();
+
+                const form =
+                    $("chatForm");
+
+                if (form) {
+                    form.requestSubmit();
+                }
+            }
+        }
+    );
+}
+
+/* =========================================================
+   FORM SETUP
+   ========================================================= */
+
+function setupForms() {
+    const loginForm =
+        $("loginForm");
+
+    const registerForm =
+        $("registerForm");
+
+    const chatForm =
+        $("chatForm");
+
+    if (loginForm) {
+        loginForm.addEventListener(
+            "submit",
+            login
+        );
+    }
+
+    if (registerForm) {
+        registerForm.addEventListener(
+            "submit",
+            register
+        );
+    }
+
+    if (chatForm) {
+        chatForm.addEventListener(
+            "submit",
+            sendMessage
+        );
+    }
+}
+
+/* =========================================================
+   INITIALIZE
+   ========================================================= */
+
+async function initialize() {
+    setupForms();
+    setupChatKeyboard();
+
+    if (state.token) {
+        setLoading(true);
+
+        try {
+            const user =
+                await refreshCurrentUser();
+
+            if (user) {
+                showApp();
+            } else {
+                clearSession();
+                showLogin();
+            }
+
+        } finally {
+            setLoading(false);
+        }
+
         return;
     }
 
-    toast.textContent =
-        message;
-
-    toast.className =
-        "toast";
-
-    toast.classList.add(
-        `toast-${type}`
-    );
-
-    toast.classList.add(
-        "show"
-    );
-
-    clearTimeout(
-        toastTimer
-    );
-
-    toastTimer =
-        setTimeout(
-            () => {
-                toast.classList.remove(
-                    "show"
-                );
-            },
-            3500
-        );
+    showLogin();
 }
 
 /* =========================================================
-   LOADING
+   GLOBAL FUNCTIONS
    ========================================================= */
 
-function setLoading(isLoading) {
-    const overlay =
-        $("loadingOverlay");
-
-    if (!overlay) {
-        return;
-    }
-
-    if (isLoading) {
-        overlay.classList.remove(
-            "hidden"
-        );
-    } else {
-        overlay.classList.add(
-            "hidden"
-        );
-    }
-}
+window.showAuth = showAuth;
+window.login = login;
+window.register = register;
+window.navigateTo = navigateTo;
+window.toggleSidebar = toggleSidebar;
+window.requestPro = requestPro;
+window.cancelProRequest = cancelProRequest;
+window.sendMessage = sendMessage;
+window.useSuggestion = useSuggestion;
+window.logout = logout;
 
 /* =========================================================
-   KEYBOARD SHORTCUTS
+   START
    ========================================================= */
 
 document.addEventListener(
-    "keydown",
-    (event) => {
-
-        const activeElement =
-            document.activeElement;
-
-        if (
-            event.key === "/" &&
-            activeElement &&
-            activeElement.tagName !== "INPUT" &&
-            activeElement.tagName !== "TEXTAREA"
-        ) {
-
-            event.preventDefault();
-
-            const input =
-                $("chatInput");
-
-            if (input) {
-                input.focus();
-            }
-        }
-    }
+    "DOMContentLoaded",
+    initialize
 );
-
-/* =========================================================
-   EXPOSE FUNCTIONS TO HTML
-   ========================================================= */
-
-window.showAuth =
-    showAuth;
-
-window.navigateTo =
-    navigateTo;
-
-window.toggleSidebar =
-    toggleSidebar;
-
-window.requestPro =
-    requestPro;
-
-window.cancelProRequest =
-    cancelProRequest;
-
-window.useSuggestion =
-    useSuggestion;
-
-window.logout =
-    logout;
-
-window.openProPageFromChat =
-    openProPageFromChat;
-
